@@ -19,7 +19,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>国語フラッシュカード（GAS安定運用版）</h1>
+  <h1>灘選抜【国語】簡易勉強システム</h1>
 
   <p style="color:#bbb;margin:8px 0 12px">
     ①「初期登録」：<code>problems</code> シートの全問題を <code>log</code> に登録（重複はスキップ）<br>
@@ -63,7 +63,8 @@ function normalize(s){
 }
 
 let deck=[], idx=0;
-
+let judged = false; // 【追加】直近の問題が判定済みかどうかのフラグ
+  
 // 初期登録：problems -> log
 document.getElementById('initBtn').onclick = async ()=>{
   try{
@@ -111,7 +112,11 @@ function render(){
   document.getElementById('answerInput').value='';
   const msg=document.getElementById('message'); msg.textContent=''; msg.className='msg';
   document.getElementById('flashcard').style.display='block';
+
+  judged = false; // 【追加】新しい問題に切り替わったら判定状態をリセット
+  document.getElementById('answerInput').focus(); // 【追加】最初は入力欄にフォーカス
 }
+  
 function next(){ if(deck.length){ idx=(idx+1)%deck.length; render(); } }
 function prev(){ if(deck.length){ idx=(idx-1+deck.length)%deck.length; render(); } }
 function reveal(){ const b=document.getElementById('backText'); b.style.display=b.style.display==='none'?'block':'none'; }
@@ -143,8 +148,9 @@ async function checkAnswer(){
   }catch(err){
     console.error(err);
   }
+ judged = true; // 【追加】判定済みにする
+ document.getElementById('answerInput').blur(); // 【追加】入力欄からフォーカスを外す
 }
-
 // --- イベント登録 ---
 document.getElementById('submitBtn').onclick = checkAnswer;
 document.getElementById('revealBtn').onclick = reveal;
@@ -153,15 +159,27 @@ document.getElementById('prevBtn').onclick = prev;
 
 // --- ショートカット ---
 window.addEventListener('keydown',(e)=>{
+  const tag = (document.activeElement?.tagName || '').toLowerCase();
+  const isTyping = tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable;
+
   if(e.key==='/' ){ e.preventDefault(); reveal(); }
-  if(e.key.toLowerCase()==='n'){ e.preventDefault(); next(); }
-  if(e.key.toLowerCase()==='p'){ e.preventDefault(); prev(); }
-  if(e.key==='Enter' && !e.shiftKey && !e.ctrlKey){ e.preventDefault(); checkAnswer(); }
-  if(e.key==='Enter' && (e.shiftKey||e.ctrlKey)){
+  if(e.key.toLowerCase()==='n'){ 
     e.preventDefault();
-    checkAnswer();
-    idx = (idx+1) % deck.length;
-    render();
+    if(judged) next(); else checkAnswer(); // 【追加】判定前なら判定、判定後なら次へ
+  }
+  if(e.key.toLowerCase()==='p'){ e.preventDefault(); prev(); }
+
+  if(e.key==='Enter' && isTyping){
+    e.preventDefault();
+    if(e.shiftKey || e.ctrlKey){
+      checkAnswer(); next(); // 【追加】Shift/Ctrl+Enter = 判定して次へ
+    }else{
+      checkAnswer(); // Enter = 判定のみ
+    }
+  }
+  if(e.key==='Enter' && !isTyping){
+    e.preventDefault();
+    if(judged) next(); else checkAnswer(); // 【追加】入力欄外でも同様の動作
   }
 });
 </script>
