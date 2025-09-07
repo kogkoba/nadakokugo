@@ -129,14 +129,17 @@ async function checkAnswer(){
   msg.className = ok ? 'msg ok' : 'msg ng';
 
   try{
-    await fetch(GAS_URL, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({action:'update', question:String(c.front||''), correctAnswer:String(c.back||'').split('|')[0], isCorrect:ok})
-    });
-  }catch(err){ console.error(err); }
+await fetch(GAS_URL, {
+  method: 'POST',
+  headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // ★
+  body: JSON.stringify({
+    action: 'update',
+    question: String(c.front || ''),
+    correctAnswer: String(c.back || '').split('|')[0],
+    isCorrect: ok
+  })
+});
 
-  setTimeout(()=>{ next(); }, ok?600:900);
-}
 
 document.getElementById('submitBtn').onclick=checkAnswer;
 document.getElementById('revealBtn').onclick=reveal;
