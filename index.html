@@ -72,10 +72,13 @@ document.getElementById('initBtn').onclick = async ()=>{
     const list = await res.json();
     if(!Array.isArray(list) || !list.length) throw new Error('problems が空です（front/back を確認）');
 
-    const post = await fetch(GAS_URL, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({action:'init', list})
-    });
+   const post = await fetch(GAS_URL, {
+  method: 'POST',
+  // ★ ここを text/plain にする（preflight回避）
+  headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+  body: JSON.stringify({ action: 'init', list })
+});
+
     if(!post.ok) throw new Error('log初期登録に失敗: ' + post.status);
     alert(`logに登録しました（${list.length}件、重複はスキップ）`);
   }catch(err){ console.error(err); alert(err.message||'初期登録でエラー'); }
