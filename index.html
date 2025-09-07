@@ -1,65 +1,245 @@
 <!doctype html>
-c.__ok=(c.__ok||0)+1; okCount++; msg.textContent='正解！'; msg.className='msg ok';
-if(excludeSeen.checked){ deck.splice(idx,1); if(idx>=deck.length) idx=0; }
-setTimeout(()=>{ render(); }, 1200);
-} else {
-c.__ng=(c.__ng||0)+1; ngCount++; msg.textContent=`不正解。正解は：${String(c[backKey]).split('|')[0]}`; msg.className='msg ng';
-}
-statSeen.textContent=seen.size; statOk.textContent=okCount; statNg.textContent=ngCount;
-const rate=(okCount+ngCount)? Math.round(okCount*100/(okCount+ngCount)) : 0; statRate.textContent=rate+'%';
-}
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>国語フラッシュカード（記述式・スプレッドシート連携）</title>
+  <style>
+    :root { --bg:#0b1020; --card:#121a33; --text:#e8eefc; --muted:#9fb2d8; --accent:#67b4ff; --ok:#3ddc97; --ng:#ff6b6b; }
+    html,body{height:100%}
+    body{margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif; background:linear-gradient(120deg,#060a17,#0b1020 40%,#0b1020); color:var(--text)}
+    .wrap{max-width:980px; margin:0 auto; padding:24px}
+    h1{margin:8px 0 16px}
+    .panel{background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:16px; padding:16px}
+    .grid{display:grid; gap:12px}
+    .grid.cols-2{grid-template-columns: 1fr 1fr}
+    label{display:block; font-size:.9rem; color:var(--muted); margin-bottom:6px}
+    input[type="text"], textarea, select{width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background:#0c1328; color:var(--text)}
+    button{appearance:none; border:none; background:var(--accent); color:#001229; padding:10px 14px; border-radius:12px; font-weight:700; cursor:pointer}
+    button.ghost{background:transparent; border:1px solid rgba(255,255,255,.16); color:var(--text)}
+    .toolbar{display:flex; gap:8px; flex-wrap:wrap}
+    .flash{margin-top:16px; background:var(--card); border:1px solid rgba(255,255,255,.08); border-radius:18px; padding:28px; min-height:260px; display:flex; align-items:center; justify-content:center; text-align:left; position:relative}
+    .flash .badge{position:absolute; top:14px; right:14px; font-size:.8rem; color:var(--muted)}
+    .q{font-size:1.2rem; line-height:1.8; white-space:pre-line}
+    .a{font-size:1rem; line-height:1.6; color:#cfe3ff; margin-top:12px; display:none}
+    .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+    .answer-box{display:flex; gap:8px; margin-top:16px}
+    .answer-box input{flex:1}
+    .msg{margin-top:10px; font-weight:700}
+    .msg.ok{color:var(--ok)}
+    .msg.ng{color:var(--ng)}
+    .stats{display:flex; gap:12px; margin-top:8px; color:var(--muted); font-size:.9rem}
+    .hint{color:var(--muted); font-size:.9rem}
+    .hidden{display:none}
+    details{background:rgba(255,255,255,.04); border:1px dashed rgba(255,255,255,.1); border-radius:12px; padding:10px 12px}
+    summary{cursor:pointer}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>国語フラッシュカード（記述式・ランダム出題）</h1>
 
+    <div class="panel grid">
+      <div>
+        <label>Googleスプレッドシートの <strong>CSV公開URL</strong></label>
+        <input id="csvUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/【ID】/export?format=csv&id=【ID】&gid=【gid】" />
+        <div class="hint">※ シートを <em>ファイル ＞ ウェブに公開</em> → 対象シートを <strong>CSV</strong> で公開し、URLを貼り付け。</div>
+      </div>
+      <div class="grid cols-2">
+        <div>
+          <label>問題の列名（例: q / question / front）</label>
+          <input id="frontKey" type="text" value="front" />
+        </div>
+        <div>
+          <label>答えの列名（例: a / answer / back）</label>
+          <input id="backKey" type="text" value="back" />
+        </div>
+      </div>
+      <div class="row">
+        <button id="loadBtn">読み込む</button>
+        <button class="ghost" id="demoBtn">デモデータ</button>
+        <label class="row" style="gap:6px">
+          <input id="excludeSeen" type="checkbox" /> 出題済みを除外
+        </label>
+      </div>
+    </div>
 
-async function loadCSV(url){
-const res=await fetch(url); if(!res.ok) throw new Error('CSVの取得に失敗: '+res.status);
-const text=await res.text(); const rows=parseCSV(text); if(rows.length<2) throw new Error('CSVにデータがありません');
-const header=rows[0].map(h=>h.trim());
-return rows.slice(1).filter(r=>r.some(v=>String(v).trim()!==''))
-.map(r=>Object.fromEntries(header.map((h,i)=>[h, r[i]??''])));
-}
-function setDeck(list){
-cardsAll=list.map(x=>({...x,__ok:0,__ng:0,__seen:false}));
-deck=cardsAll.slice(); shuffle();
-}
+    <div class="toolbar" style="margin-top:12px">
+      <button id="prevBtn" class="ghost">◀ 前へ</button>
+      <button id="revealBtn">答えを表示（/）</button>
+      <button id="nextBtn" class="ghost">次へ ▶</button>
+      <button id="shuffleBtn" class="ghost">ランダム並べ替え</button>
+      <button id="resetBtn" class="ghost">進捗リセット</button>
+      <button id="mistBtn" class="ghost">間違いのみ</button>
+      <button id="allBtn" class="ghost">全件に戻す</button>
+    </div>
 
+    <div id="flashcard" class="flash hidden">
+      <div class="badge" id="badge">0 / 0</div>
+      <div style="width:100%">
+        <div class="q" id="frontText">ここに問題が表示されます</div>
+        <div class="a" id="backText">ここに答えが表示されます</div>
+        <div class="answer-box">
+          <input id="answerInput" type="text" placeholder="ここに答えを入力（例：だす）" autocomplete="off" />
+          <button id="submitBtn">送信（Enter）</button>
+        </div>
+        <div class="msg" id="message"></div>
+      </div>
+    </div>
 
-loadBtn.addEventListener('click', async ()=>{
-try{
-frontKey=frontInp.value.trim()||'front'; backKey=backInp.value.trim()||'back';
-const url=csvUrl.value.trim(); if(!url) return alert('CSVの公開URLを入力してください');
-const data=await loadCSV(url);
-const filtered=data.filter(r=>r[frontKey]!==undefined && r[backKey]!==undefined);
-if(!filtered.length){ alert(`列名『${frontKey}』『${backKey}』が見つかりません。`); return; }
-setDeck(filtered);
-}catch(e){ alert(e.message); }
-});
-demoBtn.addEventListener('click', ()=>{
-frontKey=frontInp.value.trim()||'front'; backKey=backInp.value.trim()||'back';
-const demo=[
-{ [frontKey]: 'Q,つぎの□に共通して入る語をひらがなで書きなさい。\n舌を□\nあごを□\n口を□', [backKey]: 'だす' },
-{ [frontKey]: '「雨が上がる」の反対の意味の言葉をひらがなで書きなさい。', [backKey]: 'ふる|降る' },
-{ [frontKey]: '「草木が生える」の反対の意味の言葉をひらがなで書きなさい。', [backKey]: 'かれる|枯れる' }
-];
-setDeck(demo);
-});
+    <div class="stats" id="stats" style="display:none">
+      <div>総数: <span id="statTotal">0</span></div>
+      <div>既出: <span id="statSeen">0</span></div>
+      <div>正解: <span id="statOk">0</span></div>
+      <div>不正解: <span id="statNg">0</span></div>
+      <div>正答率: <span id="statRate">0%</span></div>
+    </div>
 
+    <details style="margin-top:18px">
+      <summary>シート形式・使い方（クリックで開く）</summary>
+      <ol>
+        <li>1行目に列名。最低限 <code>front</code>（問題）と <code>back</code>（答え）。</li>
+        <li>答えが複数可の場合は <code>だす|出す</code> のように <strong>|</strong> 区切りで列に記入。</li>
+        <li>Enter で即判定。「正解！」で自動的に次の問題へ（1.2秒後）。</li>
+        <li>ひらがな・カタカナ・全半角の揺れ、スペース・句読点は自動で正規化して判定します。</li>
+        <li>ショートカット: <span class="hint">/（答え表示）, ←/→（移動）</span></li>
+      </ol>
+    </details>
+  </div>
 
-prevBtn.addEventListener('click', prev);
-nextBtn.addEventListener('click', next);
-revealBtn.addEventListener('click', reveal);
-shuffleBtn.addEventListener('click', shuffle);
-resetBtn.addEventListener('click', resetProgress);
-mistBtn.addEventListener('click', onlyMist);
-allBtn.addEventListener('click', useAll);
+  <script>
+    function parseCSV(text){
+      const rows=[]; let cur=''; let row=[]; let inQ=false;
+      for(let i=0;i<text.length;i++){
+        const c=text[i], n=text[i+1];
+        if(inQ){
+          if(c==='"' && n==='"'){ cur+='"'; i++; }
+          else if(c==='"'){ inQ=false; }
+          else cur+=c;
+        } else {
+          if(c==='"'){ inQ=true; }
+          else if(c===','){ row.push(cur); cur=''; }
+          else if(c==='\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
+          else cur+=c;
+        }
+      }
+      if(cur.length>0 || row.length>0){ row.push(cur); rows.push(row); }
+      return rows;
+    }
 
+    function toHiragana(str){
+      return str.replace(/[ァ-ン]/g, s => String.fromCharCode(s.charCodeAt(0)-0x60));
+    }
+    function normalize(s){
+      return toHiragana((s||'')
+        .toLowerCase()
+        .normalize('NFKC')
+        .replace(/[\s\u3000]/g,'')
+        .replace(/[、。・，．,.!?！？:：;；~〜ー―\-_/\\\(\)\[\]【】<>＜＞]/g,'')
+      );
+    }
 
-submitBtn.addEventListener('click', checkAnswer);
-input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ checkAnswer(); } });
-window.addEventListener('keydown', (e)=>{
-if(e.key==='/'){ e.preventDefault(); reveal(); }
-if(e.key==='ArrowRight'){ next(); }
-if(e.key==='ArrowLeft'){ prev(); }
-});
-</script>
+    let cardsAll=[], deck=[], idx=0;
+    let frontKey='front', backKey='back';
+    let okCount=0, ngCount=0; const seen=new Set();
+
+    const $=id=>document.getElementById(id);
+    const csvUrl=$('csvUrl'); const loadBtn=$('loadBtn'); const demoBtn=$('demoBtn');
+    const frontInp=$('frontKey'); const backInp=$('backKey');
+    const flash=$('flashcard'); const frontTxt=$('frontText'); const backTxt=$('backText');
+    const badge=$('badge'); const statBox=$('stats');
+    const statTotal=$('statTotal'); const statSeen=$('statSeen'); const statOk=$('statOk'); const statNg=$('statNg'); const statRate=$('statRate');
+    const prevBtn=$('prevBtn'); const nextBtn=$('nextBtn'); const revealBtn=$('revealBtn');
+    const shuffleBtn=$('shuffleBtn'); const resetBtn=$('resetBtn'); const mistBtn=$('mistBtn'); const allBtn=$('allBtn');
+    const input=$('answerInput'); const submitBtn=$('submitBtn'); const msg=$('message');
+    const excludeSeen=$('excludeSeen');
+
+    function render(){
+      if(deck.length===0){ flash.classList.add('hidden'); statBox.style.display='none'; return; }
+      const c=deck[idx];
+      flash.classList.remove('hidden'); statBox.style.display='flex';
+      frontTxt.textContent = c[frontKey] ?? '';
+      const ans=c[backKey] ?? '';
+      if(/<\w+/.test(ans)) backTxt.innerHTML=ans; else backTxt.textContent=ans;
+      backTxt.style.display='none';
+      input.value=''; input.focus();
+      msg.textContent=''; msg.className='msg';
+      badge.textContent=`${idx+1} / ${deck.length}`;
+      statTotal.textContent=cardsAll.length; statSeen.textContent=seen.size; statOk.textContent=okCount; statNg.textContent=ngCount;
+      const rate=(okCount+ngCount)? Math.round(okCount*100/(okCount+ngCount)) : 0; statRate.textContent=rate+'%';
+    }
+    function next(){ if(deck.length){ idx=(idx+1)%deck.length; render(); } }
+    function prev(){ if(deck.length){ idx=(idx-1+deck.length)%deck.length; render(); } }
+    function reveal(){ backTxt.style.display = backTxt.style.display==='none' ? 'block' : 'none'; }
+    function shuffle(){ for(let i=deck.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [deck[i],deck[j]]=[deck[j],deck[i]]; } idx=0; render(); }
+    function resetProgress(){ seen.clear(); okCount=0; ngCount=0; cardsAll.forEach(c=>{c.__ok=0;c.__ng=0;c.__seen=false}); render(); }
+    function onlyMist(){ const m=cardsAll.filter(c=>c.__ng>0); if(m.length){ deck=m.slice(); idx=0; render(); } else alert('不正解カードはまだありません'); }
+    function useAll(){ deck=cardsAll.slice(); idx=0; render(); }
+
+    function checkAnswer(){
+      const user = normalize(input.value);
+      const c = deck[idx];
+      const answers = String(c[backKey]||'').split('|').map(x=>normalize(x));
+      const correct = answers.some(a => a.length>0 && a===user);
+      c.__seen=true; seen.add(c);
+      if(correct){
+        c.__ok=(c.__ok||0)+1; okCount++; msg.textContent='正解！'; msg.className='msg ok';
+        if(excludeSeen.checked){ deck.splice(idx,1); if(idx>=deck.length) idx=0; }
+        setTimeout(()=>{ render(); }, 1200);
+      } else {
+        c.__ng=(c.__ng||0)+1; ngCount++; msg.textContent=`不正解。正解は：${String(c[backKey]).split('|')[0]}`; msg.className='msg ng';
+      }
+      statSeen.textContent=seen.size; statOk.textContent=okCount; statNg.textContent=ngCount;
+      const rate=(okCount+ngCount)? Math.round(okCount*100/(okCount+ngCount)) : 0; statRate.textContent=rate+'%';
+    }
+
+    async function loadCSV(url){
+      const res=await fetch(url); if(!res.ok) throw new Error('CSVの取得に失敗: '+res.status);
+      const text=await res.text(); const rows=parseCSV(text); if(rows.length<2) throw new Error('CSVにデータがありません');
+      const header=rows[0].map(h=>h.trim());
+      return rows.slice(1).filter(r=>r.some(v=>String(v).trim()!==''))
+        .map(r=>Object.fromEntries(header.map((h,i)=>[h, r[i]??''])));
+    }
+    function setDeck(list){
+      cardsAll=list.map(x=>({...x,__ok:0,__ng:0,__seen:false}));
+      deck=cardsAll.slice(); shuffle();
+    }
+
+    loadBtn.addEventListener('click', async ()=>{
+      try{
+        frontKey=frontInp.value.trim()||'front'; backKey=backInp.value.trim()||'back';
+        const url=csvUrl.value.trim(); if(!url) return alert('CSVの公開URLを入力してください');
+        const data=await loadCSV(url);
+        const filtered=data.filter(r=>r[frontKey]!==undefined && r[backKey]!==undefined);
+        if(!filtered.length){ alert(`列名『${frontKey}』『${backKey}』が見つかりません。`); return; }
+        setDeck(filtered);
+      }catch(e){ alert(e.message); }
+    });
+    demoBtn.addEventListener('click', ()=>{
+      frontKey=frontInp.value.trim()||'front'; backKey=backInp.value.trim()||'back';
+      const demo=[
+        { [frontKey]: 'Q,つぎの□に共通して入る語をひらがなで書きなさい。\n舌を□\nあごを□\n口を□', [backKey]: 'だす' },
+        { [frontKey]: '「雨が上がる」の反対の意味の言葉をひらがなで書きなさい。', [backKey]: 'ふる|降る' },
+        { [frontKey]: '「草木が生える」の反対の意味の言葉をひらがなで書きなさい。', [backKey]: 'かれる|枯れる' }
+      ];
+      setDeck(demo);
+    });
+
+    prevBtn.addEventListener('click', prev);
+    nextBtn.addEventListener('click', next);
+    revealBtn.addEventListener('click', reveal);
+    shuffleBtn.addEventListener('click', shuffle);
+    resetBtn.addEventListener('click', resetProgress);
+    mistBtn.addEventListener('click', onlyMist);
+    allBtn.addEventListener('click', useAll);
+
+    submitBtn.addEventListener('click', checkAnswer);
+    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ checkAnswer(); } });
+    window.addEventListener('keydown', (e)=>{
+      if(e.key==='/'){ e.preventDefault(); reveal(); }
+      if(e.key==='ArrowRight'){ next(); }
+      if(e.key==='ArrowLeft'){ prev(); }
+    });
+  </script>
 </body>
 </html>
