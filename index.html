@@ -15,6 +15,19 @@
   .a{margin-top:10px;color:#ccc;display:none}
   .msg.ok{color:#3ddc97}
   .msg.ng{color:#ff6b6b}
+
+  /* 【追加】カウンター枠のスタイル */
+  .counter{
+    margin:12px 0 8px;
+    display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    border:1px solid rgba(255,255,255,.2); border-radius:10px; padding:10px 12px;
+    background:rgba(255,255,255,.06);
+  }
+  .counter .pill{
+    display:inline-block; padding:4px 10px; border-radius:999px;
+    background:#0c1328; border:1px solid rgba(255,255,255,.2);
+    font-weight:700;
+  }
 </style>
 </head>
 <body>
@@ -33,12 +46,20 @@
     <button id="loadAll" class="ghost">② 全件出題</button>
   </div>
 
+  <!-- 【追加】正解数＆おこづかい表示ブロック -->
+  <div class="counter" id="counterBox">
+    <span>カウンター：</span>
+    <span class="pill">正解数 <span id="okCount">0</span></span>
+    <span class="pill">おこづかい <span id="allowance">0</span> 円（1正解=1円）</span>
+    <button id="resetCounterBtn" class="ghost">カウンターをリセット</button>
+  </div>
+
   <div id="flashcard" class="flash" style="display:none">
     <div id="frontText" class="q"></div>
     <div id="backText" class="a"></div>
 
     <div style="margin-top:10px">
-      <input id="answerInput" type="text" placeholder="答えを入力" style="width:100%;padding:8px;border-radius:6px;border:1px solid #999;background:#0c1328;color:#fff">
+      <input id="answerInput" type="text" placeholder="答えを入力（ひらがな）" style="width:100%;padding:8px;border-radius:6px;border:1px solid #999;background:#0c1328;color:#fff">
       <div id="message" class="msg"></div>
       <div style="margin-top:8px">
         <button id="submitBtn" class="primary">判定（Enter）</button>
@@ -63,9 +84,28 @@ function normalize(s){
 }
 
 let deck=[], idx=0;
-let judged = false; // 【追加】直近の問題が判定済みかどうかのフラグ
-  
-// 初期登録：problems -> log
+let judged = false; // 直近の問題が判定済みか
+
+// 【追加】正解カウンター（1正解=1円）——————
+const ALLOWANCE_PER_OK = 1; // 1円
+let okTotal = Number(localStorage.getItem('okTotal') || 0);
+const okCountEl = document.getElementById('okCount');
+const allowanceEl = document.getElementById('allowance');
+function updateCounterUI(){
+  okCountEl.textContent = okTotal;
+  allowanceEl.textContent = okTotal * ALLOWANCE_PER_OK;
+  localStorage.setItem('okTotal', String(okTotal)); // 永続化
+}
+updateCounterUI();
+document.getElementById('resetCounterBtn').onclick = ()=>{
+  if(confirm('正解カウンターを0にリセットしますか？')){
+    okTotal = 0;
+    updateCounterUI();
+  }
+};
+// ————————————————————————————————
+
+/* 初期登録：problems -> log */
 document.getElementById('initBtn').onclick = async ()=>{
   try{
     const res = await fetch(GAS_URL + '?mode=problems');
@@ -73,7 +113,7 @@ document.getElementById('initBtn').onclick = async ()=>{
     const list = await res.json();
     if(!Array.isArray(list) || !list.length) throw new Error('problems が空です（front/back を確認）');
 
-    // ★ CORS preflight回避のため Content-Type は text/plain を使用
+    // preflight回避
     const post = await fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -85,7 +125,7 @@ document.getElementById('initBtn').onclick = async ()=>{
   }catch(err){ console.error(err); alert(err.message||'初期登録でエラー'); }
 };
 
-// log から読み込み
+/* log から読み込み */
 async function loadFromLog(mode){
   try{
     const res = await fetch(GAS_URL + '?mode=' + encodeURIComponent(mode));
@@ -100,7 +140,7 @@ async function loadFromLog(mode){
 document.getElementById('loadUnanswered').onclick=()=>loadFromLog('unanswered');
 document.getElementById('loadAll').onclick=()=>loadFromLog('all');
 
-// 表示
+/* 表示 */
 function render(){
   if(!deck.length){ document.getElementById('flashcard').style.display='none'; return; }
   const c=deck[idx];
@@ -113,15 +153,15 @@ function render(){
   const msg=document.getElementById('message'); msg.textContent=''; msg.className='msg';
   document.getElementById('flashcard').style.display='block';
 
-  judged = false; // 【追加】新しい問題に切り替わったら判定状態をリセット
-  document.getElementById('answerInput').focus(); // 【追加】最初は入力欄にフォーカス
+  judged = false;
+  document.getElementById('answerInput').focus();
 }
-  
+
 function next(){ if(deck.length){ idx=(idx+1)%deck.length; render(); } }
 function prev(){ if(deck.length){ idx=(idx-1+deck.length)%deck.length; render(); } }
 function reveal(){ const b=document.getElementById('backText'); b.style.display=b.style.display==='none'?'block':'none'; }
 
-// 判定→log更新
+/* 判定 → log更新 → カウンター加算 */
 async function checkAnswer(){
   if(!deck.length) return;
   const c = deck[idx];
@@ -134,11 +174,17 @@ async function checkAnswer(){
   msg.textContent = ok ? '正解！' : ('不正解。正解は: ' + String(c.back||'').split('|')[0]);
   msg.className = ok ? 'msg ok' : 'msg ng';
 
-  // ★ 先に判定済みにしてフォーカスを外す
+  // 入力体験を優先：即座に次へ行ける状態にする
   judged = true;
   document.getElementById('answerInput').blur();
 
-  // GAS 送信は非同期で後から
+  // 【追加】正解カウンターを増やす
+  if(ok){
+    okTotal += 1;
+    updateCounterUI();
+  }
+
+  // GAS送信は裏で
   try{
     fetch(GAS_URL, {
       method: 'POST',
@@ -155,35 +201,37 @@ async function checkAnswer(){
   }
 }
 
-// --- イベント登録 ---
+/* イベント登録 */
 document.getElementById('submitBtn').onclick = checkAnswer;
 document.getElementById('revealBtn').onclick = reveal;
 document.getElementById('nextBtn').onclick = next;
 document.getElementById('prevBtn').onclick = prev;
 
-// --- ショートカット ---
+/* ショートカット */
 window.addEventListener('keydown',(e)=>{
+  if (e.isComposing) return; // IME変換中は無視（任意）
+
   const tag = (document.activeElement?.tagName || '').toLowerCase();
   const isTyping = tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable;
 
   if(e.key==='/' ){ e.preventDefault(); reveal(); }
-  if(e.key.toLowerCase()==='n'){ 
+  if(e.key.toLowerCase()==='n'){
     e.preventDefault();
-    if(judged) next(); else checkAnswer(); // 【追加】判定前なら判定、判定後なら次へ
+    if(judged) next(); else checkAnswer();
   }
   if(e.key.toLowerCase()==='p'){ e.preventDefault(); prev(); }
 
   if(e.key==='Enter' && isTyping){
     e.preventDefault();
     if(e.shiftKey || e.ctrlKey){
-      checkAnswer(); next(); // 【追加】Shift/Ctrl+Enter = 判定して次へ
+      checkAnswer(); next();  // Shift/Ctrl+Enter = 判定して次へ
     }else{
-      checkAnswer(); // Enter = 判定のみ
+      checkAnswer();          // Enter = 判定のみ
     }
   }
   if(e.key==='Enter' && !isTyping){
     e.preventDefault();
-    if(judged) next(); else checkAnswer(); // 【追加】入力欄外でも同様の動作
+    if(judged) next(); else checkAnswer();
   }
 });
 </script>
