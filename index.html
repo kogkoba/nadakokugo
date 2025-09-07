@@ -55,6 +55,29 @@
           <input id="backKey" type="text" value="back" />
         </div>
       </div>
+      <div class="grid cols-2">
+        <div>
+          <label>記録用Webhook URL（任意：GASのWebアプリURL）</label>
+          <input id="logUrl" type="text" placeholder="https://script.google.com/macros/s/……/exec" />
+          <div class="hint">※ 間違い・正解のログをスプレッドシートに自動追記します。空欄なら送信しません。</div>
+        </div>
+        <div>
+          <label>記録オプション</label>
+          <label class="row" style="gap:8px"><input id="logWrongOnly" type="checkbox" checked> 間違いのみ記録</label>
+          <label class="row" style="gap:8px"><input id="logAll" type="checkbox"> 正解も記録（学習履歴）</label>
+        </div>
+      </div>
+      <div class="grid cols-2">
+        <div>
+          <label>自動送り</label>
+          <label class="row" style="gap:8px"><input id="autoNextCorrect" type="checkbox" checked> 正解時に自動で次へ</label>
+          <label class="row" style="gap:8px"><input id="autoNextAlways" type="checkbox"> 不正解でも自動で次へ</label>
+        </div>
+        <div>
+          <label>キーボード操作</label>
+          <div class="hint">Enter=判定 / <strong>Shift+Enter</strong>=判定して次へ / N=次へ / P=前へ / /=答え表示</div>
+        </div>
+      </div>
       <div class="row">
         <button id="loadBtn">読み込む</button>
         <button class="ghost" id="demoBtn">デモデータ</button>
@@ -65,9 +88,9 @@
     </div>
 
     <div class="toolbar" style="margin-top:12px">
-      <button id="prevBtn" class="ghost">◀ 前へ</button>
+      <button id="prevBtn" class="ghost">◀ 前へ（P）</button>
       <button id="revealBtn">答えを表示（/）</button>
-      <button id="nextBtn" class="ghost">次へ ▶</button>
+      <button id="nextBtn" class="ghost">次へ ▶（N）</button>
       <button id="shuffleBtn" class="ghost">ランダム並べ替え</button>
       <button id="resetBtn" class="ghost">進捗リセット</button>
       <button id="mistBtn" class="ghost">間違いのみ</button>
@@ -100,10 +123,22 @@
       <ol>
         <li>1行目に列名。最低限 <code>front</code>（問題）と <code>back</code>（答え）。</li>
         <li>答えが複数可の場合は <code>だす|出す</code> のように <strong>|</strong> 区切りで列に記入。</li>
-        <li>Enter で即判定。「正解！」で自動的に次の問題へ（1.2秒後）。</li>
+        <li>Enter で判定。<strong>Shift+Enter</strong> は「判定して次へ」。</li>
         <li>ひらがな・カタカナ・全半角の揺れ、スペース・句読点は自動で正規化して判定します。</li>
-        <li>ショートカット: <span class="hint">/（答え表示）, ←/→（移動）</span></li>
       </ol>
+      <p class="hint"><strong>ログ連携（任意）</strong>：下のGASをコピペしてデプロイ→URLを「記録用Webhook URL」に貼れば、間違い／正解をシートに自動追記します。</p>
+      <pre class="hint" style="white-space:pre-wrap">/** Google Apps Script（新しいスクリプト）
+* シートにログを追記する最小構成。デプロイ: ウェブアプリ → 全員
+*/
+function doPost(e){
+  var data = JSON.parse(e.postData.contents||'{}');
+  var ss = SpreadsheetApp.getActive(); // このGASが紐づくスプレッドシート
+  var sh = ss.getSheetByName('log') || ss.insertSheet('log');
+  if(sh.getLastRow()===0){ sh.appendRow(['timestamp','question','userAnswer','correctAnswer','isCorrect','deckIndex','total','source']); }
+  sh.appendRow([new Date(), data.question, data.userAnswer, data.correctAnswer, data.isCorrect, data.index, data.total, data.source||'web']);
+  return ContentService.createTextOutput('ok').setMimeType(ContentService.MimeType.TEXT);
+}
+</pre>
     </details>
   </div>
 
@@ -112,24 +147,14 @@
       const rows=[]; let cur=''; let row=[]; let inQ=false;
       for(let i=0;i<text.length;i++){
         const c=text[i], n=text[i+1];
-        if(inQ){
-          if(c==='"' && n==='"'){ cur+='"'; i++; }
-          else if(c==='"'){ inQ=false; }
-          else cur+=c;
-        } else {
-          if(c==='"'){ inQ=true; }
-          else if(c===','){ row.push(cur); cur=''; }
-          else if(c==='\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
-          else cur+=c;
-        }
+        if(inQ){ if(c==='"' && n==='"'){ cur+='"'; i++; } else if(c==='"'){ inQ=false; } else cur+=c; }
+        else { if(c==='"'){ inQ=true; } else if(c===','){ row.push(cur); cur=''; } else if(c==='\n'){ row.push(cur); rows.push(row); row=[]; cur=''; } else cur+=c; }
       }
       if(cur.length>0 || row.length>0){ row.push(cur); rows.push(row); }
       return rows;
     }
 
-    function toHiragana(str){
-      return str.replace(/[ァ-ン]/g, s => String.fromCharCode(s.charCodeAt(0)-0x60));
-    }
+    function toHiragana(str){ return str.replace(/[ァ-ン]/g, s => String.fromCharCode(s.charCodeAt(0)-0x60)); }
     function normalize(s){
       return toHiragana((s||'')
         .toLowerCase()
@@ -144,15 +169,17 @@
     let okCount=0, ngCount=0; const seen=new Set();
 
     const $=id=>document.getElementById(id);
-    const csvUrl=$('csvUrl'); const loadBtn=$('loadBtn'); const demoBtn=$('demoBtn');
-    const frontInp=$('frontKey'); const backInp=$('backKey');
-    const flash=$('flashcard'); const frontTxt=$('frontText'); const backTxt=$('backText');
-    const badge=$('badge'); const statBox=$('stats');
-    const statTotal=$('statTotal'); const statSeen=$('statSeen'); const statOk=$('statOk'); const statNg=$('statNg'); const statRate=$('statRate');
-    const prevBtn=$('prevBtn'); const nextBtn=$('nextBtn'); const revealBtn=$('revealBtn');
-    const shuffleBtn=$('shuffleBtn'); const resetBtn=$('resetBtn'); const mistBtn=$('mistBtn'); const allBtn=$('allBtn');
-    const input=$('answerInput'); const submitBtn=$('submitBtn'); const msg=$('message');
+    const csvUrl=$('csvUrl'), loadBtn=$('loadBtn'), demoBtn=$('demoBtn');
+    const frontInp=$('frontKey'), backInp=$('backKey');
+    const flash=$('flashcard'), frontTxt=$('frontText'), backTxt=$('backText');
+    const badge=$('badge'), statBox=$('stats');
+    const statTotal=$('statTotal'), statSeen=$('statSeen'), statOk=$('statOk'), statNg=$('statNg'), statRate=$('statRate');
+    const prevBtn=$('prevBtn'), nextBtn=$('nextBtn'), revealBtn=$('revealBtn');
+    const shuffleBtn=$('shuffleBtn'), resetBtn=$('resetBtn'), mistBtn=$('mistBtn'), allBtn=$('allBtn');
+    const input=$('answerInput'), submitBtn=$('submitBtn'), msg=$('message');
     const excludeSeen=$('excludeSeen');
+    const logUrl=$('logUrl'), logWrongOnly=$('logWrongOnly'), logAll=$('logAll');
+    const autoNextCorrect=$('autoNextCorrect'), autoNextAlways=$('autoNextAlways');
 
     function render(){
       if(deck.length===0){ flash.classList.add('hidden'); statBox.style.display='none'; return; }
@@ -176,21 +203,35 @@
     function onlyMist(){ const m=cardsAll.filter(c=>c.__ng>0); if(m.length){ deck=m.slice(); idx=0; render(); } else alert('不正解カードはまだありません'); }
     function useAll(){ deck=cardsAll.slice(); idx=0; render(); }
 
-    function checkAnswer(){
-      const user = normalize(input.value);
+    function logAttempt(payload){
+      const url = (logUrl.value||'').trim();
+      if(!url) return;
+      try{ fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).catch(()=>{}); }catch(_){ }
+    }
+
+    function checkAnswer(forceNext=false){
+      const userRaw = input.value;
+      const user = normalize(userRaw);
       const c = deck[idx];
-      const answers = String(c[backKey]||'').split('|').map(x=>normalize(x));
+      const answersRaw = String(c[backKey]||'');
+      const answers = answersRaw.split('|').map(x=>normalize(x));
       const correct = answers.some(a => a.length>0 && a===user);
       c.__seen=true; seen.add(c);
+
+      const payload = { question: String(c[frontKey]||''), userAnswer: userRaw, correctAnswer: answersRaw.split('|')[0]||'', isCorrect: correct, index: idx+1, total: deck.length, source: 'nadakokugo' };
+      if((logWrongOnly.checked && !correct) || (logAll.checked)) logAttempt(payload);
+
       if(correct){
         c.__ok=(c.__ok||0)+1; okCount++; msg.textContent='正解！'; msg.className='msg ok';
         if(excludeSeen.checked){ deck.splice(idx,1); if(idx>=deck.length) idx=0; }
-        setTimeout(()=>{ render(); }, 1200);
+        if(forceNext || autoNextCorrect.checked){ setTimeout(()=>{ render(); }, 600); }
       } else {
-        c.__ng=(c.__ng||0)+1; ngCount++; msg.textContent=`不正解。正解は：${String(c[backKey]).split('|')[0]}`; msg.className='msg ng';
+        c.__ng=(c.__ng||0)+1; ngCount++; msg.textContent=`不正解。正解は：${answersRaw.split('|')[0]}`; msg.className='msg ng';
+        if(forceNext || autoNextAlways.checked){ setTimeout(()=>{ render(); }, 900); }
       }
       statSeen.textContent=seen.size; statOk.textContent=okCount; statNg.textContent=ngCount;
       const rate=(okCount+ngCount)? Math.round(okCount*100/(okCount+ngCount)) : 0; statRate.textContent=rate+'%';
+      input.focus();
     }
 
     async function loadCSV(url){
@@ -233,12 +274,15 @@
     mistBtn.addEventListener('click', onlyMist);
     allBtn.addEventListener('click', useAll);
 
-    submitBtn.addEventListener('click', checkAnswer);
-    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ checkAnswer(); } });
+    submitBtn.addEventListener('click', ()=>checkAnswer(false));
+    input.addEventListener('keydown', (e)=>{
+      if(e.key==='Enter' && !e.shiftKey && !e.ctrlKey){ checkAnswer(false); }
+      if((e.key==='Enter' && (e.shiftKey||e.ctrlKey))){ checkAnswer(true); }
+    });
     window.addEventListener('keydown', (e)=>{
       if(e.key==='/'){ e.preventDefault(); reveal(); }
-      if(e.key==='ArrowRight'){ next(); }
-      if(e.key==='ArrowLeft'){ prev(); }
+      if(e.key.toLowerCase()==='n'){ next(); }
+      if(e.key.toLowerCase()==='p'){ prev(); }
     });
   </script>
 </body>
