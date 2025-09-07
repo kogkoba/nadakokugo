@@ -3,194 +3,148 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>国語フラッシュカード（log管理版）</title>
+<title>国語フラッシュカード（log連携版）</title>
 <style>
-  :root{--bg:#0b1020;--card:#121a33;--text:#e8eefc;--muted:#9fb2d8;--accent:#67b4ff;--ok:#3ddc97;--ng:#ff6b6b}
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif;background:#0b1020;color:var(--text);margin:0}
-  .wrap{max-width:980px;margin:auto;padding:20px}
-  h1{margin:8px 0 16px}
-  .panel{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:14px}
-  .grid{display:grid;gap:10px}
-  .grid.cols-2{grid-template-columns:1fr 1fr}
-  label{display:block;font-size:.9rem;color:var(--muted);margin-bottom:4px}
-  input[type=text]{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:#0c1328;color:var(--text)}
-  button{appearance:none;border:none;background:var(--accent);color:#001229;padding:10px 12px;border-radius:10px;font-weight:700;cursor:pointer}
-  button.ghost{background:transparent;border:1px solid rgba(255,255,255,.18);color:var(--text)}
-  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  .hint{color:var(--muted);font-size:.85rem}
-  .flash{margin-top:14px;background:#121a33;border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:22px;min-height:220px;position:relative}
-  .q{font-size:1.15rem;white-space:pre-line;line-height:1.7}
-  .a{margin-top:10px;display:none;color:#cfe3ff}
-  .badge{position:absolute;top:10px;right:12px;color:var(--muted);font-size:.85rem}
-  .answer-box{display:flex;gap:8px;margin-top:12px}
-  .answer-box input{flex:1}
-  .msg{margin-top:8px;font-weight:700}
-  .msg.ok{color:var(--ok)}
-  .msg.ng{color:var(--ng)}
+body{font-family:sans-serif;background:#0b1020;color:#fff;margin:0}
+.wrap{max-width:900px;margin:auto;padding:20px}
+button{margin:4px;padding:8px 12px;font-weight:bold;border:none;border-radius:6px;cursor:pointer}
+button.primary{background:#4fc3f7;color:#000}
+button.ghost{background:transparent;border:1px solid #999;color:#fff}
+input[type=text]{width:100%;padding:8px;border-radius:4px;border:1px solid #999}
+.flash{background:#121a33;padding:20px;border-radius:8px;margin-top:16px}
+.q{white-space:pre-line;font-size:1.2rem}
+.a{margin-top:10px;color:#ccc;display:none}
+.msg.ok{color:#4caf50}
+.msg.ng{color:#ff5252}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>国語フラッシュカード（log管理版）</h1>
+<h1>国語フラッシュカード（log連携版）</h1>
 
-  <div class="panel grid">
-    <div>
-      <label>CSV公開URL（問題用シート / CSV）</label>
-      <input id="csvUrl" type="text" value="https://docs.google.com/spreadsheets/d/e/2PACX-1vTetYp32lIacrC0HlJlWY-JPeyuDrv660zeNkHPY8gGoaOUDnE_qFhe1pFZV9JVfp8yrAxhnxxu2fGF/pub?gid=0&single=true&output=csv" />
-      <div class="hint">読み込むと全問題がlogに登録されます（重複はスキップ）</div>
-    </div>
-    <div>
-      <label>GAS Webアプリ URL（log管理API）</label>
-      <input id="gasUrl" type="text" placeholder="https://script.google.com/macros/s/…/exec" />
-    </div>
-    <div class="row">
-      <button id="btnImport">CSVをlogに登録（初回/追加入力）</button>
-      <button class="ghost" id="btnLoadUnanswered">logから読み込み：未正解のみ</button>
-      <button class="ghost" id="btnLoadAll">logから読み込み：全件</button>
-    </div>
-    <div class="hint">ショートカット：Enter＝判定／Shift+Enter＝判定して次へ／N＝次／P＝前／「/」＝答え表示</div>
-  </div>
+<div>
+<label>問題用CSV公開URL</label>
+<input id="csvUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/.../output=csv">
+</div>
 
-  <div id="flashcard" class="flash" style="display:none">
-    <div class="badge" id="badge">0 / 0</div>
-    <div class="q" id="frontText"></div>
-    <div class="a" id="backText"></div>
-    <div class="answer-box">
-      <input id="answerInput" type="text" placeholder="答えを入力（例：だす）" autocomplete="off" />
-      <button id="submitBtn">送信（Enter）</button>
-    </div>
-    <div class="msg" id="message"></div>
-  </div>
+<div style="margin-top:8px">
+<button id="initBtn" class="primary">CSVをlogに登録</button>
+<button id="loadUnanswered" class="ghost">未正解のみ出題</button>
+<button id="loadAll" class="ghost">全件出題</button>
+</div>
+
+<div id="flashcard" class="flash" style="display:none">
+<div id="frontText" class="q"></div>
+<div id="backText" class="a"></div>
+<input id="answerInput" type="text" placeholder="答えを入力">
+<div id="message" class="msg"></div>
+<div style="margin-top:8px">
+<button id="submitBtn" class="primary">判定（Enter）</button>
+<button id="revealBtn" class="ghost">答え表示（/）</button>
+<button id="prevBtn" class="ghost">◀ 前（P）</button>
+<button id="nextBtn" class="ghost">次 ▶（N）</button>
+</div>
+</div>
 </div>
 
 <script>
-// ひらがな正規化
-function toHiragana(str){ return str.replace(/[ァ-ン]/g, s => String.fromCharCode(s.charCodeAt(0)-0x60)); }
-function normalize(s){
-  return toHiragana((s||'').toLowerCase().normalize('NFKC')
-    .replace(/[\s\u3000]/g,'')
-    .replace(/[、。・，．,.!?！？:：;；~〜ー―\-_/\\\(\)\[\]【】<>＜＞]/g,''));
-}
+// 固定GAS URL
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzyeUq0KF7Kym9-JmoPCPkRz2t_GFJU2YjZkEhoD3xeOe-WtxXTePdeIgihq-Dri1ds/exec";
 
-// CSVパーサ（Gスプ対応）
+// CSVパーサ（Googleスプレッドシート対応）
 function parseCSV(text){
-  text = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
-  const rows = []; let cur = '', row = [], inQ = false;
-  for (let i=0;i<text.length;i++){
+  text = text.replace(/^\uFEFF/,'').replace(/\r\n/g,'\n');
+  const rows=[]; let cur='', row=[], inQuotes=false;
+  for(let i=0;i<text.length;i++){
     const c=text[i], n=text[i+1];
-    if(inQ){
-      if(c=='"' && n=='"'){ cur+='"'; i++; }
-      else if(c=='"'){ inQ=false; }
-      else cur+=c;
+    if(inQuotes){
+      if(c==='"' && n==='"'){cur+='"'; i++;}
+      else if(c==='"'){inQuotes=false;}
+      else{cur+=c;}
     }else{
-      if(c=='"'){ inQ=true; }
-      else if(c==','){ row.push(cur); cur=''; }
-      else if(c=='\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
-      else cur+=c;
+      if(c==='"'){inQuotes=true;}
+      else if(c===','){row.push(cur); cur='';}
+      else if(c==='\n'){row.push(cur); rows.push(row); row=[]; cur='';}
+      else{cur+=c;}
     }
   }
   row.push(cur); rows.push(row);
-  if(!rows.length) return [];
-  const header = rows.shift().map(h=>(h||'').trim());
-  return rows
-    .filter(r => r.some(v => (v||'').trim()!==''))
-    .map(r => { const o={}; header.forEach((h,i)=>o[h]=r[i]??''); return o; });
+  const header=rows.shift().map(h=>(h||'').trim());
+  return rows.filter(r=>r.some(v=>(v||'').trim()!==''))
+             .map(r=>Object.fromEntries(header.map((h,i)=>[h, r[i]||''])));
 }
 
-// 状態
+// 正規化（ひらがな化＋記号除去）
+function toHiragana(str){return str.replace(/[ァ-ン]/g,s=>String.fromCharCode(s.charCodeAt(0)-0x60));}
+function normalize(s){
+  return toHiragana((s||'').toLowerCase().normalize('NFKC')
+    .replace(/[\s\u3000]/g,'')
+    .replace(/[、。・，．,.!?！？:：;；~〜ー―\-_/\\()［\]【】<>＜＞]/g,''));
+}
+
 let deck=[], idx=0;
-const $=id=>document.getElementById(id);
 
-// UI
-function render(){
-  if(!deck.length){ $('flashcard').style.display='none'; return; }
-  $('flashcard').style.display='block';
-  const c=deck[idx];
-  $('frontText').textContent = c.front||'';
-  const ans=c.back||''; if(/<\w+/.test(ans)) $('backText').innerHTML=ans; else $('backText').textContent=ans;
-  $('backText').style.display='none';
-  $('answerInput').value=''; $('answerInput').focus();
-  $('message').textContent='';
-  $('message').className='msg';
-  $('badge').textContent = `${idx+1} / ${deck.length}`;
-}
-function next(){ if(deck.length){ idx=(idx+1)%deck.length; render(); } }
-function prev(){ if(deck.length){ idx=(idx-1+deck.length)%deck.length; render(); } }
-function reveal(){ const el=$('backText'); el.style.display = (el.style.display==='none'?'block':'none'); }
-
-// CSV→log登録
-async function importCSV(){
-  const url = $('csvUrl').value.trim();
-  const gas = $('gasUrl').value.trim();
-  if(!url) return alert('CSV公開URLを入れてください');
-  if(!gas) return alert('GASのURLを入れてください');
-
-  const res = await fetch(url);
-  if(!res.ok) return alert('CSV取得に失敗: '+res.status);
-  const txt = await res.text();
-  if(/^\s*</.test(txt)) return alert('CSVではなくHTMLが返りました。公開設定（このシート/CSV）を確認してください。');
-
-  const rows = parseCSV(txt);
-  // 列名 front/back を前提（必要なら入力項目にしてもOK）
-  const list = rows.map(r => ({question: String(r.front||''), correctAnswer: String(r.back||'')}))
-                   .filter(x => x.question);
-  if(!list.length) return alert('front/back 列が見つからないか、データがありません。');
-  await fetch(gas, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'init', list})});
-  alert('logに登録しました（重複はスキップ）');
-}
+// CSVをlogに登録
+document.getElementById('initBtn').onclick = async ()=>{
+  const csvUrl = document.getElementById('csvUrl').value.trim();
+  if(!csvUrl) return alert('CSVの公開URLを入力してください');
+  const res = await fetch(csvUrl);
+  const text = await res.text();
+  const list = parseCSV(text).map(r=>({question:r.front, correctAnswer:r.back}));
+  await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'init', list:list})});
+  alert('logに登録しました');
+};
 
 // logから読み込み
 async function loadFromLog(mode){
-  const gas = $('gasUrl').value.trim();
-  if(!gas) return alert(https://script.google.com/macros/s/AKfycbzyeUq0KF7Kym9-JmoPCPkRz2t_GFJU2YjZkEhoD3xeOe-WtxXTePdeIgihq-Dri1ds/exec);
-  const res = await fetch(gas + (gas.includes('?')?'&':'?') + 'mode=' + mode);
-  if(!res.ok) return alert('log取得に失敗: '+res.status);
-  const arr = await res.json();
-  if(!Array.isArray(arr) || !arr.length) return alert('出題対象が見つかりません');
-  // シャッフル
-  for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; }
-  deck = arr; idx = 0; render();
+  const res = await fetch(GAS_URL + '?mode=' + mode);
+  deck = await res.json();
+  if(!deck.length){alert('出題できる問題がありません'); return;}
+  idx=0; render();
 }
 
-// 回答→正誤判定→log更新
-async function checkAnswer(){
+document.getElementById('loadUnanswered').onclick=()=>loadFromLog('unanswered');
+document.getElementById('loadAll').onclick=()=>loadFromLog('all');
+
+// 表示
+function render(){
   if(!deck.length) return;
-  const gas = $('gasUrl').value.trim();
-  const c = deck[idx];
-  const raw = $('answerInput').value;
-  const user = normalize(raw);
-  const answers = String(c.back||'').split('|').map(s=>normalize(s));
-  const ok = answers.some(a => a && a===user);
-
-  $('message').textContent = ok ? '正解！' : ('不正解。正解は：'+ String(c.back||'').split('|')[0]);
-  $('message').className = 'msg ' + (ok?'ok':'ng');
-
-  if(gas){
-    fetch(gas, {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({action:'update', question:String(c.front||''), correctAnswer:String(c.back||'').split('|')[0], isCorrect:ok})
-    }).catch(()=>{});
-  }
-
-  setTimeout(()=>{ next(); }, ok ? 600 : 900);
+  const c=deck[idx];
+  document.getElementById('frontText').textContent = c.front;
+  document.getElementById('backText').textContent = c.back;
+  document.getElementById('backText').style.display='none';
+  document.getElementById('answerInput').value='';
+  document.getElementById('message').textContent='';
+  document.getElementById('flashcard').style.display='block';
 }
 
-// イベント
-$('btnImport').addEventListener('click', importCSV);
-$('btnLoadUnanswered').addEventListener('click', ()=>loadFromLog('unanswered')); // ①未正解のみ
-$('btnLoadAll').addEventListener('click', ()=>loadFromLog('all'));               // ②全件
+// 判定
+function checkAnswer(){
+  const userRaw=document.getElementById('answerInput').value;
+  const user=normalize(userRaw);
+  const c=deck[idx];
+  const corrects=String(c.back).split('|').map(x=>normalize(x));
+  const ok=corrects.includes(user);
+  document.getElementById('message').textContent = ok?'正解！':'不正解。正解は:'+c.back;
+  document.getElementById('message').className = ok?'msg ok':'msg ng';
+  // GAS更新
+  fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'update',question:c.front,correctAnswer:c.back,isCorrect:ok})});
+}
 
-$('submitBtn').addEventListener('click', checkAnswer);
-$('answerInput').addEventListener('keydown', e=>{
-  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); checkAnswer(); }
-  if(e.key==='Enter' && e.shiftKey){ e.preventDefault(); checkAnswer(); setTimeout(next, 50); }
-});
+document.getElementById('submitBtn').onclick=checkAnswer;
+document.getElementById('revealBtn').onclick=()=>{const b=document.getElementById('backText'); b.style.display=b.style.display==='none'?'block':'none';};
+document.getElementById('nextBtn').onclick=()=>{idx=(idx+1)%deck.length; render();};
+document.getElementById('prevBtn').onclick=()=>{idx=(idx-1+deck.length)%deck.length; render();};
 
-window.addEventListener('keydown', e=>{
-  const tag=(document.activeElement.tagName||'').toLowerCase();
-  const typing=(tag==='input'||tag==='textarea'||document.activeElement.isContentEditable);
-  if(e.key==='/' ){ e.preventDefault(); reveal(); }
-  if(e.key.toLowerCase()==='n'){ if(typing) e.preventDefault(); next(); }
-  if(e.key.toLowerCase()==='p'){ if(typing) e.preventDefault(); prev(); }
+// ショートカット
+window.addEventListener('keydown',(e)=>{
+  if(e.key==='/' ){e.preventDefault();document.getElementById('revealBtn').click();}
+  if(e.key.toLowerCase()==='n'){e.preventDefault();document.getElementById('nextBtn').click();}
+  if(e.key.toLowerCase()==='p'){e.preventDefault();document.getElementById('prevBtn').click();}
+  if(e.key==='Enter' && !e.shiftKey && !e.ctrlKey){e.preventDefault();checkAnswer();}
+  if(e.key==='Enter' && (e.shiftKey||e.ctrlKey)){e.preventDefault();checkAnswer(); idx=(idx+1)%deck.length; render();}
 });
 </script>
 </body>
