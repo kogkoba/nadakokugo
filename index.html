@@ -1,0 +1,65 @@
+<!doctype html>
+c.__ok=(c.__ok||0)+1; okCount++; msg.textContent='正解！'; msg.className='msg ok';
+if(excludeSeen.checked){ deck.splice(idx,1); if(idx>=deck.length) idx=0; }
+setTimeout(()=>{ render(); }, 1200);
+} else {
+c.__ng=(c.__ng||0)+1; ngCount++; msg.textContent=`不正解。正解は：${String(c[backKey]).split('|')[0]}`; msg.className='msg ng';
+}
+statSeen.textContent=seen.size; statOk.textContent=okCount; statNg.textContent=ngCount;
+const rate=(okCount+ngCount)? Math.round(okCount*100/(okCount+ngCount)) : 0; statRate.textContent=rate+'%';
+}
+
+
+async function loadCSV(url){
+const res=await fetch(url); if(!res.ok) throw new Error('CSVの取得に失敗: '+res.status);
+const text=await res.text(); const rows=parseCSV(text); if(rows.length<2) throw new Error('CSVにデータがありません');
+const header=rows[0].map(h=>h.trim());
+return rows.slice(1).filter(r=>r.some(v=>String(v).trim()!==''))
+.map(r=>Object.fromEntries(header.map((h,i)=>[h, r[i]??''])));
+}
+function setDeck(list){
+cardsAll=list.map(x=>({...x,__ok:0,__ng:0,__seen:false}));
+deck=cardsAll.slice(); shuffle();
+}
+
+
+loadBtn.addEventListener('click', async ()=>{
+try{
+frontKey=frontInp.value.trim()||'front'; backKey=backInp.value.trim()||'back';
+const url=csvUrl.value.trim(); if(!url) return alert('CSVの公開URLを入力してください');
+const data=await loadCSV(url);
+const filtered=data.filter(r=>r[frontKey]!==undefined && r[backKey]!==undefined);
+if(!filtered.length){ alert(`列名『${frontKey}』『${backKey}』が見つかりません。`); return; }
+setDeck(filtered);
+}catch(e){ alert(e.message); }
+});
+demoBtn.addEventListener('click', ()=>{
+frontKey=frontInp.value.trim()||'front'; backKey=backInp.value.trim()||'back';
+const demo=[
+{ [frontKey]: 'Q,つぎの□に共通して入る語をひらがなで書きなさい。\n舌を□\nあごを□\n口を□', [backKey]: 'だす' },
+{ [frontKey]: '「雨が上がる」の反対の意味の言葉をひらがなで書きなさい。', [backKey]: 'ふる|降る' },
+{ [frontKey]: '「草木が生える」の反対の意味の言葉をひらがなで書きなさい。', [backKey]: 'かれる|枯れる' }
+];
+setDeck(demo);
+});
+
+
+prevBtn.addEventListener('click', prev);
+nextBtn.addEventListener('click', next);
+revealBtn.addEventListener('click', reveal);
+shuffleBtn.addEventListener('click', shuffle);
+resetBtn.addEventListener('click', resetProgress);
+mistBtn.addEventListener('click', onlyMist);
+allBtn.addEventListener('click', useAll);
+
+
+submitBtn.addEventListener('click', checkAnswer);
+input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ checkAnswer(); } });
+window.addEventListener('keydown', (e)=>{
+if(e.key==='/'){ e.preventDefault(); reveal(); }
+if(e.key==='ArrowRight'){ next(); }
+if(e.key==='ArrowLeft'){ prev(); }
+});
+</script>
+</body>
+</html>
