@@ -134,23 +134,27 @@ async function checkAnswer(){
   msg.textContent = ok ? '正解！' : ('不正解。正解は: ' + String(c.back||'').split('|')[0]);
   msg.className = ok ? 'msg ok' : 'msg ng';
 
+  // ★ 先に判定済みにしてフォーカスを外す
+  judged = true;
+  document.getElementById('answerInput').blur();
+
+  // GAS 送信は非同期で後から
   try{
-    await fetch(GAS_URL, {
+    fetch(GAS_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // preflight回避
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
         action: 'update',
         question: String(c.front || ''),
         correctAnswer: String(c.back || '').split('|')[0],
         isCorrect: ok
       })
-    });
+    }).catch(err => console.error(err));
   }catch(err){
     console.error(err);
   }
- judged = true; // 【追加】判定済みにする
- document.getElementById('answerInput').blur(); // 【追加】入力欄からフォーカスを外す
 }
+
 // --- イベント登録 ---
 document.getElementById('submitBtn').onclick = checkAnswer;
 document.getElementById('revealBtn').onclick = reveal;
