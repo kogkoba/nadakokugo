@@ -37,7 +37,7 @@
   <div class="panel grid">
     <div>
       <label>Googleスプレッドシートの <strong>CSV公開URL</strong></label>
-      <input id="csvUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/【ID】/export?format=csv&id=【ID】&gid=【gid】" />
+      <input id="csvUrl" type="text" value="https://docs.google.com/spreadsheets/d/e/2PACX-1vTetYp32lIacrC0HlJlWY-JPeyuDrv660zeNkHPY8gGoaOUDnE_qFhe1pFZV9JVfp8yrAxhnxxu2fGF/pub?gid=0&single=true&output=csv" placeholder="https://docs.google.com/spreadsheets/d/【ID】/export?format=csv&id=【ID】&gid=【gid】" />
       <div class="hint">※ スプレッドシート → ファイル ＞ ウェブに公開 → 形式 <strong>CSV</strong> のURLを貼付け</div>
     </div>
     <div class="grid cols-2">
@@ -52,7 +52,7 @@
     </div>
     <div class="grid cols-2">
       <div>
-        <label>https://script.google.com/macros/s/AKfycbwqu6Re6FDYTJZmz1WY9Hcj05JA1UkvqLToGGjlnROmNcjzc5NqBy0WnpyBb9zjeE1x/exec</label>
+        <label>記録用 Webhook（GAS ウェブアプリ URL）</label>
         <input id="logUrl" type="text" placeholder="https://script.google.com/macros/s/…/exec" />
         <div class="hint">※ 設定すると解答ごとにログをスプレッドシートへ保存（正解/不正解・問題文など）</div>
       </div>
@@ -114,35 +114,45 @@
  * POST: {question,userAnswer,correctAnswer,isCorrect,index,total,source}
  */
 function doPost(e){
-  var data = JSON.parse(e.postData.contents||'{}');
+  var data = {};
+  try {
+    if (e && e.postData && e.postData.contents) {
+      data = JSON.parse(e.postData.contents);
+    }
+  } catch(err) {}
   var ss = SpreadsheetApp.getActive();
   var sh = ss.getSheetByName('log') || ss.insertSheet('log');
-  if(sh.getLastRow()===0){
+  if (sh.getLastRow() === 0) {
     sh.appendRow(['timestamp','question','userAnswer','correctAnswer','isCorrect','deckIndex','total','source']);
   }
-  sh.appendRow([new Date(), data.question, data.userAnswer, data.correctAnswer, data.isCorrect, data.index, data.total, data.source||'web']);
+  sh.appendRow([new Date(), data.question||'', data.userAnswer||'', data.correctAnswer||'', data.isCorrect===true, data.index||'', data.total||'', data.source||'web']);
   return ContentService.createTextOutput('ok').setMimeType(ContentService.MimeType.TEXT);
 }
 
 function doGet(e){
-  var mode = (e.parameter.mode||'').toLowerCase();
+  var mode = (e && e.parameter && e.parameter.mode || '').toLowerCase();
   var ss = SpreadsheetApp.getActive();
   var sh = ss.getSheetByName('log');
   var out = [];
-  if(sh){
+  if (sh) {
     var values = sh.getDataRange().getValues();
     var idxMap = {question:1, correct:3, isCorrect:4};
-    var seen = {};
-    for(var i=1;i<values.length;i++){
+    var uniq = {};
+    for (var i = 1; i < values.length; i++) {
       var q = values[i][idxMap.question] || '';
       var a = values[i][idxMap.correct] || '';
-      var ok = String(values[i][idxMap.isCorrect]).toLowerCase()==='true';
-      if(mode==='missed' && ok) continue;
-      var key = q+'\u0000'+a; // 重複除去
-      if(!seen[key]){ seen[key]=1; out.push({front:q, back:a}); }
+      var ok = String(values[i][idxMap.isCorrect]).toLowerCase() === 'true';
+      if (mode === 'missed' && ok) continue;
+      var key = q + '\u0000' + a;
+      if (!uniq[key]) { uniq[key] = 1; out.push({front:q, back:a}); }
     }
   }
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// 手動テスト用（エディタの「実行」でエラーにならないように）
+function testPost(){
+  return doPost({ postData:{ contents: JSON.stringify({question:'テスト', userAnswer:'x', correctAnswer:'y', isCorrect:false, index:1, total:10, source:'test'}) } });
 }
 </pre>
   </details>
@@ -153,50 +163,40 @@ function doGet(e){
 function parseCSV(text){
   // BOM除去 & 改行統一
   text = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
-
   const rows = [];
   let cur = '', row = [], inQuotes = false;
-
   for (let i = 0; i < text.length; i++) {
     const c = text[i], n = text[i + 1];
     if (inQuotes) {
-      if (c === '"' && n === '"') { // 二重引用符 → 1個
-        cur += '"'; i++;
-      } else if (c === '"') {
-        inQuotes = false;
-      } else {
-        cur += c;
-      }
+      if (c === '"' && n === '"') { cur += '"'; i++; }
+      else if (c === '"') { inQuotes = false; }
+      else { cur += c; }
     } else {
-      if (c === '"') {
-        inQuotes = true;
-      } else if (c === ',') {
-        row.push(cur); cur = '';
-      } else if (c === '\n') {
-        row.push(cur); rows.push(row); row = []; cur = '';
-      } else {
-        cur += c;
-      }
+      if (c === '"') { inQuotes = true; }
+      else if (c === ',') { row.push(cur); cur = ''; }
+      else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+      else { cur += c; }
     }
   }
   row.push(cur); rows.push(row);
-
-  // ヘッダー行を抽出
   if (!rows.length) return [];
   const header = rows.shift().map(h => (h || '').trim());
-
-  // データ行をオブジェクト化（空行スキップ）
-  const data = rows
+  return rows
     .filter(r => r.some(v => (v || '').trim() !== ''))
     .map(r => {
       const obj = {};
       header.forEach((h, i) => { obj[h] = (r[i] == null ? '' : r[i]); });
       return obj;
     });
-
-  return data;
 }
 
+// ===== 日本語判定の正規化 =====
+function toHiragana(str){ return str.replace(/[ァ-ン]/g, s => String.fromCharCode(s.charCodeAt(0)-0x60)); }
+function normalize(s){
+  return toHiragana((s||'').toLowerCase().normalize('NFKC')
+    .replace(/[\s\u3000]/g,'')
+    .replace(/[、。・，．,.!?！？:：;；~〜ー―\-_/\\\(\)\[\]【】<>＜＞]/g,''));
+}
 
 // ===== 状態 =====
 let cardsAll=[], deck=[], idx=0;
@@ -227,7 +227,7 @@ function render(){
   const c=deck[idx];
   flash.style.display='block'; statBox.style.display='flex';
   frontTxt.textContent=c[frontKey]??'';
-  const ans=c[backKey]??''; if(/<\\w+/.test(ans)) backTxt.innerHTML=ans; else backTxt.textContent=ans; backTxt.style.display='none';
+  const ans=c[backKey]??''; if(/<\w+/.test(ans)) backTxt.innerHTML=ans; else backTxt.textContent=ans; backTxt.style.display='none';
   input.value=''; input.focus(); msg.textContent=''; msg.className='msg';
   badge.textContent=`${idx+1} / ${deck.length}`; updateStats();
 }
@@ -242,7 +242,7 @@ function useAll(){ deck=cardsAll.slice(); idx=0; render(); }
 // ===== ログ連携 =====
 function logAttempt(payload){
   const url=(logUrl.value||'').trim(); if(!url) return;
-  try{ fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(()=>{});}catch(_){ }
+  try{ fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(()=>{});}catch(_){}
 }
 async function fetchLog(mode){
   const url=(logUrl.value||'').trim();
@@ -254,12 +254,13 @@ async function fetchLog(mode){
 }
 
 // ===== 判定 =====
-function checkAnswer(forceNext=false){
+function checkAnswer(){
   const userRaw=input.value; const user=normalize(userRaw);
   const c=deck[idx]; const answersRaw=String(c[backKey]||'');
   const answers=answersRaw.split('|').map(x=>normalize(x));
   const correct=answers.some(a=>a.length>0 && a===user);
   c.__seen=true; seen.add(c);
+
   const payload={question:String(c[frontKey]||''),userAnswer:userRaw,correctAnswer:answersRaw.split('|')[0]||'',isCorrect:correct,index:idx+1,total:deck.length,source:'nadakokugo'};
   if((logWrongOnly.checked && !correct) || (logAll.checked)) logAttempt(payload);
 
@@ -277,10 +278,9 @@ function checkAnswer(forceNext=false){
 // ===== データ読み込み =====
 async function loadCSV(url){
   const res=await fetch(url); if(!res.ok) throw new Error('CSVの取得に失敗: '+res.status);
-  const text=await res.text(); const rows=parseCSV(text); if(rows.length<2) throw new Error('CSVにデータがありません');
-  const header=rows[0].map(h=>h.trim());
-  return rows.slice(1).filter(r=>r.some(v=>String(v).trim()!==''))
-    .map(r=>Object.fromEntries(header.map((h,i)=>[h, r[i]??''])));
+  const text=await res.text();
+  if (/^\s*</.test(text)) throw new Error('CSVではなくHTMLが返りました。公開設定（「このシート」「CSV」）とURLを確認してください。');
+  return parseCSV(text); // オブジェクト配列
 }
 function setDeck(list){
   cardsAll=list.map(x=>({...x,__ok:0,__ng:0,__seen:false}));
@@ -307,29 +307,24 @@ document.getElementById('demoBtn').addEventListener('click',()=>{
   ]; setDeck(demo);
 });
 document.getElementById('loadMissedBtn').addEventListener('click', async()=>{
-  const arr = await fetchLog('missed');
-  if(!arr.length){ alert('ログに不正解の記録が見つかりません。'); return; }
-  setDeck(arr);
+  const arr = await fetchLog('missed'); if(!arr.length){ alert('ログに不正解の記録が見つかりません。'); return; } setDeck(arr);
 });
 document.getElementById('loadAllLogBtn').addEventListener('click', async()=>{
-  const arr = await fetchLog('all');
-  if(!arr.length){ alert('ログの取得結果が空でした。'); return; }
-  setDeck(arr);
+  const arr = await fetchLog('all'); if(!arr.length){ alert('ログの取得結果が空でした。'); return; } setDeck(arr);
 });
 
-prevBtn.addEventListener('click', next => {});
-document.getElementById('prevBtn').addEventListener('click', ()=>{ const _=0; prev(); });
-document.getElementById('nextBtn').addEventListener('click', ()=>{ const _=0; next(); });
+document.getElementById('prevBtn').addEventListener('click', prev);
+document.getElementById('nextBtn').addEventListener('click', next);
 document.getElementById('revealBtn').addEventListener('click', reveal);
 document.getElementById('shuffleBtn').addEventListener('click', shuffle);
 document.getElementById('resetBtn').addEventListener('click', resetProgress);
 document.getElementById('mistBtn').addEventListener('click', onlyMist);
 document.getElementById('allBtn').addEventListener('click', useAll);
 
-document.getElementById('submitBtn').addEventListener('click', ()=>checkAnswer(false));
+document.getElementById('submitBtn').addEventListener('click', ()=>checkAnswer());
 document.getElementById('answerInput').addEventListener('keydown', (e)=>{
-  if(e.key==='Enter' && !e.shiftKey && !e.ctrlKey){ e.preventDefault(); checkAnswer(false); }
-  if(e.key==='Enter' && (e.shiftKey||e.ctrlKey)){ e.preventDefault(); checkAnswer(true); }
+  if(e.key==='Enter' && !e.shiftKey && !e.ctrlKey){ e.preventDefault(); checkAnswer(); }
+  if(e.key==='Enter' && (e.shiftKey||e.ctrlKey)){ e.preventDefault(); checkAnswer(); setTimeout(next, 50); }
 });
 
 // 入力中でも N/P/矢印 等で移動できるようにする
