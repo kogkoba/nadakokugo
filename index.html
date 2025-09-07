@@ -51,7 +51,7 @@
 </div>
 
 <script>
-// あなたのGAS WebアプリURL
+// === あなたのGAS WebアプリURL（exec） ===
 const GAS_URL = "https://script.google.com/macros/s/AKfycbya0ARmIZ9XTPdNjaw3UZ57oLuFRdufGdm5rbJFjZMnPO9i7YdCDUfHCzYQ5yNaysDr/exec";
 
 // ひらがな正規化
@@ -72,14 +72,14 @@ document.getElementById('initBtn').onclick = async ()=>{
     const list = await res.json();
     if(!Array.isArray(list) || !list.length) throw new Error('problems が空です（front/back を確認）');
 
-   const post = await fetch(GAS_URL, {
-  method: 'POST',
-  // ★ ここを text/plain にする（preflight回避）
-  headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-  body: JSON.stringify({ action: 'init', list })
-});
-
+    // ★ CORS preflight回避のため Content-Type は text/plain を使用
+    const post = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'init', list })
+    });
     if(!post.ok) throw new Error('log初期登録に失敗: ' + post.status);
+
     alert(`logに登録しました（${list.length}件、重複はスキップ）`);
   }catch(err){ console.error(err); alert(err.message||'初期登録でエラー'); }
 };
@@ -91,6 +91,7 @@ async function loadFromLog(mode){
     if(!res.ok) throw new Error('log取得に失敗: ' + res.status);
     const arr = await res.json();
     if(!Array.isArray(arr) || !arr.length){ alert('出題できる問題が見つかりません'); return; }
+    // シャッフル
     for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; }
     deck = arr; idx = 0; render();
   }catch(err){ console.error(err); alert(err.message||'読み込みでエラー'); }
@@ -129,30 +130,39 @@ async function checkAnswer(){
   msg.className = ok ? 'msg ok' : 'msg ng';
 
   try{
-await fetch(GAS_URL, {
-  method: 'POST',
-  headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // ★
-  body: JSON.stringify({
-    action: 'update',
-    question: String(c.front || ''),
-    correctAnswer: String(c.back || '').split('|')[0],
-    isCorrect: ok
-  })
-});
+    await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // preflight回避
+      body: JSON.stringify({
+        action: 'update',
+        question: String(c.front || ''),
+        correctAnswer: String(c.back || '').split('|')[0],
+        isCorrect: ok
+      })
+    });
+  }catch(err){
+    console.error(err);
+  }
+}
 
+// --- イベント登録 ---
+document.getElementById('submitBtn').onclick = checkAnswer;
+document.getElementById('revealBtn').onclick = reveal;
+document.getElementById('nextBtn').onclick = next;
+document.getElementById('prevBtn').onclick = prev;
 
-document.getElementById('submitBtn').onclick=checkAnswer;
-document.getElementById('revealBtn').onclick=reveal;
-document.getElementById('nextBtn').onclick=next;
-document.getElementById('prevBtn').onclick=prev;
-
-// ショートカット
+// --- ショートカット ---
 window.addEventListener('keydown',(e)=>{
   if(e.key==='/' ){ e.preventDefault(); reveal(); }
   if(e.key.toLowerCase()==='n'){ e.preventDefault(); next(); }
   if(e.key.toLowerCase()==='p'){ e.preventDefault(); prev(); }
   if(e.key==='Enter' && !e.shiftKey && !e.ctrlKey){ e.preventDefault(); checkAnswer(); }
-  if(e.key==='Enter' && (e.shiftKey||e.ctrlKey)){ e.preventDefault(); checkAnswer(); idx=(idx+1)%deck.length; render(); }
+  if(e.key==='Enter' && (e.shiftKey||e.ctrlKey)){
+    e.preventDefault();
+    checkAnswer();
+    idx = (idx+1) % deck.length;
+    render();
+  }
 });
 </script>
 </body>
