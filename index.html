@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>国語フラッシュカード（記述式・スプレッドシート連携 + 学習ログ/GAS）</title>
+<title>国語フラッシュカード（学習ログ＋初出題管理/GAS連携）</title>
 <style>
   :root{--bg:#0b1020;--card:#121a33;--text:#e8eefc;--muted:#9fb2d8;--accent:#67b4ff;--ok:#3ddc97;--ng:#ff6b6b}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif;background:#0b1020;color:var(--text);margin:0}
@@ -52,23 +52,24 @@
     </div>
     <div class="grid cols-2">
       <div>
-        <label>https://script.google.com/macros/s/AKfycbyq3ZNA3PHgcLzeiU0JyNfhTIIibgbCHKryIySmzpuP6MrfoDIqTwU4dBfp0VuSE2KS/exec</label>
+        <label>記録用 Webhook（GAS ウェブアプリ URL）</label>
         <input id="logUrl" type="text" placeholder="https://script.google.com/macros/s/…/exec" />
-        <div class="hint">※ 設定すると解答ごとにログをスプレッドシートへ保存（正解/不正解・問題文など）</div>
+        <div class="hint">※ 設定すると「読み込んだ全問題（初出題）」と「各解答の正誤」を <strong>自動記録</strong> します</div>
       </div>
       <div>
         <label>記録オプション</label>
         <div class="row">
-          <label class="row"><input id="logWrongOnly" type="checkbox" checked> 間違いのみ記録</label>
-          <label class="row"><input id="logAll" type="checkbox"> 正解も記録</label>
+          <label class="row"><input id="logInitOnLoad" type="checkbox" checked> 初回読み込みを記録（初出題）</label>
+          <label class="row"><input id="logAttempts" type="checkbox" checked> 解答の正誤を記録</label>
         </div>
       </div>
     </div>
+
     <div class="row">
-      <button id="loadBtn">CSVから読み込む</button>
+      <button id="loadBtn">CSVから読み込む（初出題を記録）</button>
       <button class="ghost" id="demoBtn">デモデータ</button>
-      <button class="ghost" id="loadMissedBtn">ログ（GAS）から <strong>間違いのみ</strong> 読み込む</button>
-      <button class="ghost" id="loadAllLogBtn">ログ（GAS）から <strong>全問題</strong> 読み込む</button>
+      <button class="ghost" id="loadMissedOrNewBtn">ログ（GAS）から <strong>間違い＋初出題</strong> を読む</button>
+      <button class="ghost" id="loadAllLogBtn">ログ（GAS）から <strong>全問題</strong> を読む</button>
       <label class="row" style="gap:6px"><input id="excludeSeen" type="checkbox"> 正解した問題をデッキから除外</label>
     </div>
     <div class="hint">ショートカット：Enter＝判定／<strong>Shift+Enter or Ctrl+Enter＝判定して次へ</strong>／N＝次へ／P＝前へ／←→＝移動／<code>/</code>＝答え表示</div>
@@ -102,92 +103,32 @@
     <div>不正解: <span id="statNg">0</span></div>
     <div>正答率: <span id="statRate">0%</span></div>
   </div>
-
-  <details style="margin-top:14px">
-    <summary>GAS（Google Apps Script）設定：記録＋再出題API</summary>
-    <div class="hint">スプレッドシートの「拡張機能 → Apps Script」で下記を貼付け→ウェブアプリとしてデプロイ。<br>アクセス権：全員／実行ユーザー：自分。</div>
-<pre class="hint" style="white-space:pre-wrap">/**
- * ログ保存 & 取り出しAPI
- * デプロイ: ウェブアプリ (doGet/doPost)
- * GET:  ?mode=missed  → 不正解のみ（重複除去）
- *       ?mode=all     → 全ログ（重複除去）
- * POST: {question,userAnswer,correctAnswer,isCorrect,index,total,source}
- */
-function doPost(e){
-  var data = {};
-  try {
-    if (e && e.postData && e.postData.contents) {
-      data = JSON.parse(e.postData.contents);
-    }
-  } catch(err) {}
-  var ss = SpreadsheetApp.getActive();
-  var sh = ss.getSheetByName('log') || ss.insertSheet('log');
-  if (sh.getLastRow() === 0) {
-    sh.appendRow(['timestamp','question','userAnswer','correctAnswer','isCorrect','deckIndex','total','source']);
-  }
-  sh.appendRow([new Date(), data.question||'', data.userAnswer||'', data.correctAnswer||'', data.isCorrect===true, data.index||'', data.total||'', data.source||'web']);
-  return ContentService.createTextOutput('ok').setMimeType(ContentService.MimeType.TEXT);
-}
-
-function doGet(e){
-  var mode = (e && e.parameter && e.parameter.mode || '').toLowerCase();
-  var ss = SpreadsheetApp.getActive();
-  var sh = ss.getSheetByName('log');
-  var out = [];
-  if (sh) {
-    var values = sh.getDataRange().getValues();
-    var idxMap = {question:1, correct:3, isCorrect:4};
-    var uniq = {};
-    for (var i = 1; i < values.length; i++) {
-      var q = values[i][idxMap.question] || '';
-      var a = values[i][idxMap.correct] || '';
-      var ok = String(values[i][idxMap.isCorrect]).toLowerCase() === 'true';
-      if (mode === 'missed' && ok) continue;
-      var key = q + '\u0000' + a;
-      if (!uniq[key]) { uniq[key] = 1; out.push({front:q, back:a}); }
-    }
-  }
-  return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
-}
-
-// 手動テスト用（エディタの「実行」でエラーにならないように）
-function testPost(){
-  return doPost({ postData:{ contents: JSON.stringify({question:'テスト', userAnswer:'x', correctAnswer:'y', isCorrect:false, index:1, total:10, source:'test'}) } });
-}
-</pre>
-  </details>
 </div>
 
 <script>
-// ===== CSV（Googleスプレッドシート対応パーサ） =====
+// ===== CSVパーサ（Googleスプレッドシート対応） =====
 function parseCSV(text){
-  // BOM除去 & 改行統一
   text = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
-  const rows = [];
-  let cur = '', row = [], inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i], n = text[i + 1];
-    if (inQuotes) {
-      if (c === '"' && n === '"') { cur += '"'; i++; }
-      else if (c === '"') { inQuotes = false; }
-      else { cur += c; }
-    } else {
-      if (c === '"') { inQuotes = true; }
-      else if (c === ',') { row.push(cur); cur = ''; }
-      else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
-      else { cur += c; }
+  const rows = []; let cur = '', row = [], inQuotes = false;
+  for (let i=0;i<text.length;i++){
+    const c=text[i], n=text[i+1];
+    if(inQuotes){
+      if(c=='"' && n=='"'){ cur+='"'; i++; }
+      else if(c=='"'){ inQuotes=false; }
+      else cur+=c;
+    }else{
+      if(c=='"'){ inQuotes=true; }
+      else if(c==','){ row.push(cur); cur=''; }
+      else if(c=='\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
+      else cur+=c;
     }
   }
   row.push(cur); rows.push(row);
-  if (!rows.length) return [];
-  const header = rows.shift().map(h => (h || '').trim());
+  if(!rows.length) return [];
+  const header = rows.shift().map(h=>(h||'').trim());
   return rows
-    .filter(r => r.some(v => (v || '').trim() !== ''))
-    .map(r => {
-      const obj = {};
-      header.forEach((h, i) => { obj[h] = (r[i] == null ? '' : r[i]); });
-      return obj;
-    });
+    .filter(r => r.some(v => (v||'').trim()!==''))
+    .map(r => { const o={}; header.forEach((h,i)=>o[h]=r[i]??''); return o; });
 }
 
 // ===== 日本語判定の正規化 =====
@@ -214,8 +155,8 @@ const prevBtn=$('prevBtn'), nextBtn=$('nextBtn'), revealBtn=$('revealBtn');
 const shuffleBtn=$('shuffleBtn'), resetBtn=$('resetBtn'), mistBtn=$('mistBtn'), allBtn=$('allBtn');
 const input=$('answerInput'), submitBtn=$('submitBtn'), msg=$('message');
 const excludeSeen=$('excludeSeen');
-const logUrl=$('logUrl'), logWrongOnly=$('logWrongOnly'), logAll=$('logAll');
-const loadMissedBtn=$('loadMissedBtn'), loadAllLogBtn=$('loadAllLogBtn');
+const logUrl=$('logUrl'), logInitOnLoad=$('logInitOnLoad'), logAttempts=$('logAttempts');
+const loadMissedOrNewBtn=$('loadMissedOrNewBtn'), loadAllLogBtn=$('loadAllLogBtn');
 
 function updateStats(){
   statTotal.textContent=cardsAll.length; statSeen.textContent=seen.size; statOk.textContent=okCount; statNg.textContent=ngCount;
@@ -240,9 +181,15 @@ function onlyMist(){ const m=cardsAll.filter(c=>c.__ng>0); if(m.length){ deck=m.
 function useAll(){ deck=cardsAll.slice(); idx=0; render(); }
 
 // ===== ログ連携 =====
-function logAttempt(payload){
-  const url=(logUrl.value||'').trim(); if(!url) return;
-  try{ fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(()=>{});}catch(_){}
+function postJSON(url, payload){
+  return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+}
+function logInitDeck(list){
+  const url=(logUrl.value||'').trim(); if(!url || !logInitOnLoad.checked) return;
+  // 1件ずつ送信（GASはシンプルなdoPostを想定）
+  list.forEach((c,i)=>{
+    postJSON(url,{type:'init',question:String(c[frontKey]||''),correctAnswer:String(c[backKey]||''),index:i+1,total:list.length,source:'nadakokugo'});
+  });
 }
 async function fetchLog(mode){
   const url=(logUrl.value||'').trim();
@@ -261,8 +208,18 @@ function checkAnswer(){
   const correct=answers.some(a=>a.length>0 && a===user);
   c.__seen=true; seen.add(c);
 
-  const payload={question:String(c[frontKey]||''),userAnswer:userRaw,correctAnswer:answersRaw.split('|')[0]||'',isCorrect:correct,index:idx+1,total:deck.length,source:'nadakokugo'};
-  if((logWrongOnly.checked && !correct) || (logAll.checked)) logAttempt(payload);
+  if((logUrl.value||'').trim() && logAttempts.checked){
+    postJSON(logUrl.value.trim(),{
+      type:'attempt',
+      question:String(c[frontKey]||''),
+      userAnswer:userRaw,
+      correctAnswer:answersRaw.split('|')[0]||'',
+      isCorrect:correct,
+      index:idx+1,
+      total:deck.length,
+      source:'nadakokugo'
+    }).catch(()=>{});
+  }
 
   if(correct){
     c.__ok=(c.__ok||0)+1; okCount++; msg.textContent='正解！'; msg.className='msg ok';
@@ -295,6 +252,7 @@ document.getElementById('loadBtn').addEventListener('click', async()=>{
     const data=await loadCSV(url);
     const filtered=data.filter(r=>r[frontKey]!==undefined && r[backKey]!==undefined);
     if(!filtered.length){ alert(`列名『${frontKey}』『${backKey}』が見つかりません。`); return; }
+    if((logUrl.value||'').trim()) logInitDeck(filtered); // ← 初出題を記録
     setDeck(filtered);
   }catch(e){ alert(e.message); }
 });
@@ -304,13 +262,18 @@ document.getElementById('demoBtn').addEventListener('click',()=>{
     {[frontKey]:'Q,つぎの□に共通して入る語をひらがなで書きなさい。\n舌を□\nあごを□\n口を□',[backKey]:'だす'},
     {[frontKey]:'「雨が上がる」の反対の意味の言葉をひらがなで書きなさい。',[backKey]:'ふる|降る'},
     {[frontKey]:'「草木が生える」の反対の意味の言葉をひらがなで書きなさい。',[backKey]:'かれる|枯れる'}
-  ]; setDeck(demo);
+  ]; if((logUrl.value||'').trim()) logInitDeck(demo); setDeck(demo);
 });
-document.getElementById('loadMissedBtn').addEventListener('click', async()=>{
-  const arr = await fetchLog('missed'); if(!arr.length){ alert('ログに不正解の記録が見つかりません。'); return; } setDeck(arr);
+
+loadMissedOrNewBtn.addEventListener('click', async()=>{
+  const arr = await fetchLog('missed_or_unseen'); // ← 間違い＋初出題
+  if(!arr.length){ alert('該当する問題が見つかりません。'); return; }
+  setDeck(arr);
 });
-document.getElementById('loadAllLogBtn').addEventListener('click', async()=>{
-  const arr = await fetchLog('all'); if(!arr.length){ alert('ログの取得結果が空でした。'); return; } setDeck(arr);
+loadAllLogBtn.addEventListener('click', async()=>{
+  const arr = await fetchLog('all'); // ← 全問題
+  if(!arr.length){ alert('ログの取得結果が空でした。'); return; }
+  setDeck(arr);
 });
 
 document.getElementById('prevBtn').addEventListener('click', prev);
