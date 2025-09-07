@@ -149,36 +149,54 @@ function doGet(e){
 </div>
 
 <script>
-// ===== CSV（クォート対応の簡易パーサ） =====
+// ===== CSV（Googleスプレッドシート対応パーサ） =====
 function parseCSV(text){
-  const rows=[]; let cur=''; let row=[]; let inQ=false;
-  for(let i=0;i<text.length;i++){
-    const c=text[i], n=text[i+1];
-    if(inQ){
-      if(c==='\"' && n==='\"'){ cur+='\"'; i++; }
-      else if(c==='\"'){ inQ=false; }
-      else cur+=c;
+  // BOM除去 & 改行統一
+  text = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+
+  const rows = [];
+  let cur = '', row = [], inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i], n = text[i + 1];
+    if (inQuotes) {
+      if (c === '"' && n === '"') { // 二重引用符 → 1個
+        cur += '"'; i++;
+      } else if (c === '"') {
+        inQuotes = false;
+      } else {
+        cur += c;
+      }
     } else {
-      if(c==='\"'){ inQ=true; }
-      else if(c===','){ row.push(cur); cur=''; }
-      else if(c==='\\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
-      else cur+=c;
+      if (c === '"') {
+        inQuotes = true;
+      } else if (c === ',') {
+        row.push(cur); cur = '';
+      } else if (c === '\n') {
+        row.push(cur); rows.push(row); row = []; cur = '';
+      } else {
+        cur += c;
+      }
     }
   }
-  if(cur.length>0 || row.length>0){ row.push(cur); rows.push(row); }
-  return rows;
+  row.push(cur); rows.push(row);
+
+  // ヘッダー行を抽出
+  if (!rows.length) return [];
+  const header = rows.shift().map(h => (h || '').trim());
+
+  // データ行をオブジェクト化（空行スキップ）
+  const data = rows
+    .filter(r => r.some(v => (v || '').trim() !== ''))
+    .map(r => {
+      const obj = {};
+      header.forEach((h, i) => { obj[h] = (r[i] == null ? '' : r[i]); });
+      return obj;
+    });
+
+  return data;
 }
 
-// ===== 日本語判定の正規化 =====
-function toHiragana(str){ return str.replace(/[ァ-ン]/g, s => String.fromCharCode(s.charCodeAt(0)-0x60)); }
-function normalize(s){
-  return toHiragana((s||'')
-    .toLowerCase()
-    .normalize('NFKC')
-    .replace(/[\\s\\u3000]/g,'')
-    .replace(/[、。・，．,.!?！？:：;；~〜ー―\\-_/\\\\\\(\\)\\[\\]【】<>＜＞]/g,'')
-  );
-}
 
 // ===== 状態 =====
 let cardsAll=[], deck=[], idx=0;
