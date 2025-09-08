@@ -28,6 +28,12 @@
     background:#0c1328; border:1px solid rgba(255,255,255,.2);
     font-weight:700;
   }
+
+  /* 【見えなくなる問題】IME変換候補やモバイルKBが被らないための余白仕組み */
+  :root{ --kb-safe: max(env(safe-area-inset-bottom, 0px), 0px); }
+  body.kb-open { padding-bottom: calc( var(--kb-space, 240px) + var(--kb-safe) ); }
+  .ime-spacer{ display:none; height:var(--kb-space, 240px); }
+  body.kb-open .ime-spacer{ display:block; }
 </style>
 </head>
 <body>
@@ -69,6 +75,9 @@
       </div>
     </div>
   </div>
+
+  <!-- 【見えなくなる問題】IME候補やKBで隠れないようにする余白ブロック -->
+  <div id="belowSpace" class="ime-spacer" aria-hidden="true"></div>
 </div>
 
 <script>
@@ -113,7 +122,6 @@ document.getElementById('initBtn').onclick = async ()=>{
     const list = await res.json();
     if(!Array.isArray(list) || !list.length) throw new Error('problems が空です（front/back を確認）');
 
-    // preflight回避
     const post = await fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -132,7 +140,6 @@ async function loadFromLog(mode){
     if(!res.ok) throw new Error('log取得に失敗: ' + res.status);
     const arr = await res.json();
     if(!Array.isArray(arr) || !arr.length){ alert('出題できる問題が見つかりません'); return; }
-    // シャッフル
     for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; }
     deck = arr; idx = 0; render();
   }catch(err){ console.error(err); alert(err.message||'読み込みでエラー'); }
@@ -174,17 +181,14 @@ async function checkAnswer(){
   msg.textContent = ok ? '正解！' : ('不正解。正解は: ' + String(c.back||'').split('|')[0]);
   msg.className = ok ? 'msg ok' : 'msg ng';
 
-  // 入力体験を優先：即座に次へ行ける状態にする
   judged = true;
   document.getElementById('answerInput').blur();
 
-  // 【追加】正解カウンターを増やす
   if(ok){
     okTotal += 1;
     updateCounterUI();
   }
 
-  // GAS送信は裏で
   try{
     fetch(GAS_URL, {
       method: 'POST',
@@ -209,7 +213,7 @@ document.getElementById('prevBtn').onclick = prev;
 
 /* ショートカット */
 window.addEventListener('keydown',(e)=>{
-  if (e.isComposing) return; // IME変換中は無視（任意）
+  if (e.isComposing) return;
 
   const tag = (document.activeElement?.tagName || '').toLowerCase();
   const isTyping = tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable;
@@ -224,9 +228,9 @@ window.addEventListener('keydown',(e)=>{
   if(e.key==='Enter' && isTyping){
     e.preventDefault();
     if(e.shiftKey || e.ctrlKey){
-      checkAnswer(); next();  // Shift/Ctrl+Enter = 判定して次へ
+      checkAnswer(); next();
     }else{
-      checkAnswer();          // Enter = 判定のみ
+      checkAnswer();
     }
   }
   if(e.key==='Enter' && !isTyping){
@@ -234,6 +238,40 @@ window.addEventListener('keydown',(e)=>{
     if(judged) next(); else checkAnswer();
   }
 });
+
+// 【見えなくなる問題】IME候補で選択肢が隠れないようにする処理
+const answerEl = document.getElementById('answerInput');
+const spacerEl = document.getElementById('belowSpace');
+function estimateKbSpace(){
+  let h = 240;
+  if (window.visualViewport){
+    const diff = window.innerHeight - window.visualViewport.height;
+    if (diff > 120) h = Math.min(Math.max(diff, 200), 360);
+  }
+  document.documentElement.style.setProperty('--kb-space', h + 'px');
+}
+function openKbSpace(){
+  estimateKbSpace();
+  document.body.classList.add('kb-open');
+  setTimeout(()=>{
+    spacerEl.scrollIntoView({ block:'end', behavior:'smooth' });
+  }, 50);
+}
+function closeKbSpace(){
+  document.body.classList.remove('kb-open');
+}
+answerEl.addEventListener('focus', openKbSpace);
+answerEl.addEventListener('blur', closeKbSpace);
+if (window.visualViewport){
+  window.visualViewport.addEventListener('resize', ()=>{
+    const likelyOpen = window.visualViewport.height < window.innerHeight - 50;
+    if (document.activeElement === answerEl && likelyOpen){
+      openKbSpace();
+    }else{
+      closeKbSpace();
+    }
+  });
+}
 </script>
 </body>
 </html>
