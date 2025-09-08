@@ -10,7 +10,8 @@
   button{margin:4px;padding:8px 12px;font-weight:bold;border:none;border-radius:6px;cursor:pointer}
   button.primary{background:#4fc3f7;color:#000}
   button.ghost{background:transparent;border:1px solid #999;color:#fff}
-  .flash{background:#121a33;padding:20px;border-radius:8px;margin-top:16px}
+  .flash{background:#121a33;padding:20px;border-radius:12px;margin-top:16px}
+
   .q{white-space:pre-line;font-size:1.2rem}
   .a{margin-top:10px;color:#ccc;display:none}
   .msg.ok{color:#3ddc97}
@@ -34,6 +35,35 @@
   body.kb-open { padding-bottom: calc( var(--kb-space, 240px) + var(--kb-safe) ); }
   .ime-spacer{ display:none; height:var(--kb-space, 240px); }
   body.kb-open .ime-spacer{ display:block; }
+
+  /* 【固定入力欄】カード下部に入力エリアを固定する */
+  #flashcard{ position:relative; }
+  .qa-scroll{
+    /* 入力欄の上下動を防ぐため、質問/選択肢はここをスクロール */
+    max-height: min(48vh, 520px);
+    overflow:auto;
+    padding-bottom:8px;
+  }
+  .answer-dock{
+    position: sticky;
+    bottom: calc(16px + var(--kb-safe)); /* 画面下からの固定位置 */
+    z-index: 2;
+    margin: 10px -20px -20px;           /* カード端まで広げる */
+    padding: 12px 20px 16px;
+    background: rgba(11,16,32,.85);     /* 背景を半透明にして下の内容と分離 */
+    backdrop-filter: blur(6px);
+    border-top: 1px solid rgba(255,255,255,.12);
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+  }
+  .answer-dock input{
+    width:100%;
+    padding:8px;
+    border-radius:6px;
+    border:1px solid #999;
+    background:#0c1328;
+    color:#fff;
+  }
 </style>
 </head>
 <body>
@@ -52,7 +82,7 @@
     <button id="loadAll" class="ghost">② 全件出題</button>
   </div>
 
-  <!-- 【追加】正解数＆おこづかい表示ブロック -->
+  <!-- カウンター -->
   <div class="counter" id="counterBox">
     <span>カウンター：</span>
     <span class="pill">正解数 <span id="okCount">0</span></span>
@@ -61,13 +91,17 @@
   </div>
 
   <div id="flashcard" class="flash" style="display:none">
-    <div id="frontText" class="q"></div>
-    <div id="backText" class="a"></div>
+    <!-- 【固定入力欄】上側：スクロール領域（質問＆選択肢） -->
+    <div class="qa-scroll">
+      <div id="frontText" class="q"></div>
+      <div id="backText" class="a"></div>
+      <div id="message" class="msg" style="margin-top:6px"></div>
+    </div>
 
-    <div style="margin-top:10px">
-      <input id="answerInput" type="text" placeholder="答えを入力" style="width:100%;padding:8px;border-radius:6px;border:1px solid #999;background:#0c1328;color:#fff">
-      <div id="message" class="msg"></div>
-      <div style="margin-top:8px">
+    <!-- 【固定入力欄】下側：常にほぼ同じ位置にある入力ドック -->
+    <div class="answer-dock">
+      <input id="answerInput" type="text" placeholder="答えを入力">
+      <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
         <button id="submitBtn" class="primary">判定（Enter）</button>
         <button id="revealBtn" class="ghost">答え表示（/）</button>
         <button id="prevBtn" class="ghost">◀ 前（P）</button>
@@ -95,24 +129,22 @@ function normalize(s){
 let deck=[], idx=0;
 let judged = false; // 直近の問題が判定済みか
 
-// 【追加】正解カウンター（1正解=1円）——————
-const ALLOWANCE_PER_OK = 1; // 1円
+// 正解カウンター（1正解=1円）
+const ALLOWANCE_PER_OK = 1;
 let okTotal = Number(localStorage.getItem('okTotal') || 0);
 const okCountEl = document.getElementById('okCount');
 const allowanceEl = document.getElementById('allowance');
 function updateCounterUI(){
   okCountEl.textContent = okTotal;
   allowanceEl.textContent = okTotal * ALLOWANCE_PER_OK;
-  localStorage.setItem('okTotal', String(okTotal)); // 永続化
+  localStorage.setItem('okTotal', String(okTotal));
 }
 updateCounterUI();
 document.getElementById('resetCounterBtn').onclick = ()=>{
   if(confirm('正解カウンターを0にリセットしますか？')){
-    okTotal = 0;
-    updateCounterUI();
+    okTotal = 0; updateCounterUI();
   }
 };
-// ————————————————————————————————
 
 /* 初期登録：problems -> log */
 document.getElementById('initBtn').onclick = async ()=>{
@@ -121,14 +153,12 @@ document.getElementById('initBtn').onclick = async ()=>{
     if(!res.ok) throw new Error('problems取得に失敗: ' + res.status);
     const list = await res.json();
     if(!Array.isArray(list) || !list.length) throw new Error('problems が空です（front/back を確認）');
-
     const post = await fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action: 'init', list })
     });
     if(!post.ok) throw new Error('log初期登録に失敗: ' + post.status);
-
     alert(`logに登録しました（${list.length}件、重複はスキップ）`);
   }catch(err){ console.error(err); alert(err.message||'初期登録でエラー'); }
 };
@@ -140,6 +170,7 @@ async function loadFromLog(mode){
     if(!res.ok) throw new Error('log取得に失敗: ' + res.status);
     const arr = await res.json();
     if(!Array.isArray(arr) || !arr.length){ alert('出題できる問題が見つかりません'); return; }
+    // シャッフル
     for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; }
     deck = arr; idx = 0; render();
   }catch(err){ console.error(err); alert(err.message||'読み込みでエラー'); }
@@ -151,17 +182,21 @@ document.getElementById('loadAll').onclick=()=>loadFromLog('all');
 function render(){
   if(!deck.length){ document.getElementById('flashcard').style.display='none'; return; }
   const c=deck[idx];
+
+  // 表示領域更新（質問＆選択肢）
   document.getElementById('frontText').textContent = c.front || '';
   const ans=c.back||'';
   const backEl=document.getElementById('backText');
   if(/<\w+/.test(ans)) backEl.innerHTML=ans; else backEl.textContent=ans;
   backEl.style.display='none';
-  document.getElementById('answerInput').value='';
-  const msg=document.getElementById('message'); msg.textContent=''; msg.className='msg';
-  document.getElementById('flashcard').style.display='block';
 
+  // 入力欄リセット（位置は固定なので揺れない）
+  const msg=document.getElementById('message'); msg.textContent=''; msg.className='msg';
+  const input = document.getElementById('answerInput');
+  input.value='';
+  document.getElementById('flashcard').style.display='block';
   judged = false;
-  document.getElementById('answerInput').focus();
+  input.focus();
 }
 
 function next(){ if(deck.length){ idx=(idx+1)%deck.length; render(); } }
@@ -182,12 +217,8 @@ async function checkAnswer(){
   msg.className = ok ? 'msg ok' : 'msg ng';
 
   judged = true;
-  document.getElementById('answerInput').blur();
 
-  if(ok){
-    okTotal += 1;
-    updateCounterUI();
-  }
+  if(ok){ okTotal += 1; updateCounterUI(); }
 
   try{
     fetch(GAS_URL, {
@@ -200,12 +231,10 @@ async function checkAnswer(){
         isCorrect: ok
       })
     }).catch(err => console.error(err));
-  }catch(err){
-    console.error(err);
-  }
+  }catch(err){ console.error(err); }
 }
 
-/* イベント登録 */
+/* クリック設定 */
 document.getElementById('submitBtn').onclick = checkAnswer;
 document.getElementById('revealBtn').onclick = reveal;
 document.getElementById('nextBtn').onclick = next;
@@ -214,7 +243,6 @@ document.getElementById('prevBtn').onclick = prev;
 /* ショートカット */
 window.addEventListener('keydown',(e)=>{
   if (e.isComposing) return;
-
   const tag = (document.activeElement?.tagName || '').toLowerCase();
   const isTyping = tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable;
 
@@ -227,11 +255,8 @@ window.addEventListener('keydown',(e)=>{
 
   if(e.key==='Enter' && isTyping){
     e.preventDefault();
-    if(e.shiftKey || e.ctrlKey){
-      checkAnswer(); next();
-    }else{
-      checkAnswer();
-    }
+    if(e.shiftKey || e.ctrlKey){ checkAnswer(); next(); }
+    else{ checkAnswer(); }
   }
   if(e.key==='Enter' && !isTyping){
     e.preventDefault();
@@ -239,9 +264,10 @@ window.addEventListener('keydown',(e)=>{
   }
 });
 
-// 【見えなくなる問題】IME候補で選択肢が隠れないようにする処理
+/* 【見えなくなる問題】IME候補で隠れないようにする処理 */
 const answerEl = document.getElementById('answerInput');
 const spacerEl = document.getElementById('belowSpace');
+
 function estimateKbSpace(){
   let h = 240;
   if (window.visualViewport){
@@ -253,9 +279,8 @@ function estimateKbSpace(){
 function openKbSpace(){
   estimateKbSpace();
   document.body.classList.add('kb-open');
-  setTimeout(()=>{
-    spacerEl.scrollIntoView({ block:'end', behavior:'smooth' });
-  }, 50);
+  // 入力欄を視界に保つ
+  setTimeout(()=>{ document.querySelector('.answer-dock').scrollIntoView({block:'end',behavior:'smooth'}); }, 50);
 }
 function closeKbSpace(){
   document.body.classList.remove('kb-open');
@@ -265,11 +290,8 @@ answerEl.addEventListener('blur', closeKbSpace);
 if (window.visualViewport){
   window.visualViewport.addEventListener('resize', ()=>{
     const likelyOpen = window.visualViewport.height < window.innerHeight - 50;
-    if (document.activeElement === answerEl && likelyOpen){
-      openKbSpace();
-    }else{
-      closeKbSpace();
-    }
+    if (document.activeElement === answerEl && likelyOpen){ openKbSpace(); }
+    else{ closeKbSpace(); }
   });
 }
 </script>
