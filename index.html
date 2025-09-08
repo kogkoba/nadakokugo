@@ -16,7 +16,7 @@
   .msg.ok{color:#3ddc97}
   .msg.ng{color:#ff6b6b}
 
-  /* 【追加】カウンター枠のスタイル */
+  /* カウンター枠のスタイル */
   .counter{
     margin:12px 0 8px;
     display:flex; gap:10px; align-items:center; flex-wrap:wrap;
@@ -28,37 +28,35 @@
     background:#0c1328; border:1px solid rgba(255,255,255,.2);
     font-weight:700;
   }
-/* ===== 自前ドロップダウン：ここから追記 ===== */
-.answer-wrap { position: relative; }
 
-.choice-pop{
-  position:absolute; left:0; right:0; top:100%;
-  margin-top:8px;
-  background:#0f172a;
-  border:1px solid #334155;
-  border-radius:8px;
-  box-shadow:0 8px 24px rgba(0,0,0,.35);
-  z-index:9999;
-  max-height:240px;
-  overflow:auto;
-}
-.choice-pop.open-up{
-  top:auto; bottom:100%;
-  margin-top:0; margin-bottom:8px;
-}
-.choice-pop.hidden{ display:none; }
+  /* ===== 自前ドロップダウン ===== */
+  .answer-wrap { position: relative; }
 
-.choice-item{
-  padding:10px 12px; cursor:pointer; line-height:1.3; user-select:none;
-}
-.choice-item:hover, .choice-item.active{ background:#1e293b; }
+  .choice-pop{
+    position:absolute; left:0; right:0; top:100%;
+    margin-top:8px;
+    background:#0f172a;
+    border:1px solid #334155;
+    border-radius:8px;
+    box-shadow:0 8px 24px rgba(0,0,0,.35);
+    z-index:9999;
+    max-height:240px;
+    overflow:auto;
+  }
+  .choice-pop.open-up{
+    top:auto; bottom:100%;
+    margin-top:0; margin-bottom:8px;
+  }
+  .choice-pop.hidden{ display:none; }
 
-/* 念のため：親でクリップされないように */
-.wrap, .flash { overflow:visible; position:relative; z-index:1; }
-.answer-input{ position:relative; z-index:10; }
-/* ===== 自前ドロップダウン：ここまで追記 ===== */
+  .choice-item{
+    padding:10px 12px; cursor:pointer; line-height:1.3; user-select:none;
+  }
+  .choice-item:hover, .choice-item.active{ background:#1e293b; }
 
-  
+  /* 親でクリップされないように */
+  .wrap, .flash { overflow:visible; position:relative; z-index:1; }
+  .answer-input{ position:relative; z-index:10; }
 </style>
 </head>
 <body>
@@ -77,7 +75,7 @@
     <button id="loadAll" class="ghost">② 全件出題</button>
   </div>
 
-  <!-- 【追加】正解数＆おこづかい表示ブロック -->
+  <!-- 正解数＆おこづかい表示 -->
   <div class="counter" id="counterBox">
     <span>カウンター：</span>
     <span class="pill">正解数 <span id="okCount">0</span></span>
@@ -90,15 +88,13 @@
     <div id="backText" class="a"></div>
 
     <div style="margin-top:10px">
-      <!-- ▼▼▼ ここから：自前ドロップダウン対応の入力ブロック ▼▼▼ -->
+      <!-- 自前ドロップダウン対応の入力ブロック -->
       <div class="answer-wrap">
         <input id="answerInput" class="answer-input" type="text"
                placeholder="答えを入力" autocomplete="off" spellcheck="false"
                style="width:100%;padding:8px;border-radius:6px;border:1px solid #999;background:#0c1328;color:#fff">
-        <!-- 候補を描画するポップアップ -->
         <div id="choice-pop" class="choice-pop hidden" role="listbox" aria-label="候補一覧"></div>
       </div>
-      <!-- ▲▲▲ ここまで ▲▲▲ -->
 
       <div id="message" class="msg"></div>
       <div style="margin-top:8px">
@@ -120,13 +116,13 @@ function toHiragana(str){return str.replace(/[ァ-ン]/g,s=>String.fromCharCode(
 function normalize(s){
   return toHiragana((s||'').toLowerCase().normalize('NFKC')
     .replace(/[\s\u3000]/g,'')
-    .replace(/[、。・，．,.!?！？:：;；~〜ー―\-_/\\()\[\]【】<>＜＞]/g,''));
+    .replace(/[、。・，．,.!?！？:：;；~〜ー―\\-_/\\()\\[\\]【】<>＜＞]/g,''));
 }
 
 let deck=[], idx=0;
 let judged = false; // 直近の問題が判定済みか
 
-  // ===== 自前ドロップダウン：ここから追記 =====
+/* ===== 自前ドロップダウン ===== */
 const popEl = document.getElementById('choice-pop');
 const answerElRef = document.getElementById('answerInput');
 
@@ -137,13 +133,11 @@ function showChoices(options){
   baseChoices = Array.isArray(options) ? options.slice() : [];
   renderChoices(baseChoices);
 }
-
 function hideChoices(){
   popEl.classList.add('hidden');
   popEl.innerHTML = '';
   activeIndex = -1;
 }
-
 function renderChoices(options){
   if(!options || options.length===0){ hideChoices(); return; }
   popEl.innerHTML = options
@@ -153,7 +147,6 @@ function renderChoices(options){
   placePopup();
   activeIndex = -1;
 }
-
 function placePopup(){
   const r = answerElRef.getBoundingClientRect();
   const popH = Math.min(popEl.scrollHeight, 240); // CSSのmax-heightと合わせる
@@ -161,23 +154,20 @@ function placePopup(){
   if(spaceBelow < popH){ popEl.classList.add('open-up'); }
   else{ popEl.classList.remove('open-up'); }
 }
-
 // クリック確定
 popEl.addEventListener('click', (e)=>{
   const item = e.target.closest('.choice-item');
   if(!item) return;
   selectChoice(Number(item.dataset.i));
 });
-
 function selectChoice(i){
   const el = popEl.querySelector(`.choice-item[data-i="${i}"]`);
   if(!el) return;
   answerElRef.value = el.textContent.trim();
   hideChoices();
-  // 自動判定したい場合は↓を有効化
+  // 必要なら自動判定：
   // checkAnswer();
 }
-
 // キーボード操作（↑↓Enter / Esc）
 answerElRef.addEventListener('keydown', (e)=>{
   if(popEl.classList.contains('hidden')) return;
@@ -191,12 +181,11 @@ answerElRef.addEventListener('keydown', (e)=>{
     activeIndex = (activeIndex - 1 + items.length) % items.length;
     updateActive(items); e.preventDefault();
   }else if(e.key==='Enter'){
-    if(activeIndex>=0){ selectChoice(activeIndex); e.prevent止; }
+    if(activeIndex>=0){ selectChoice(activeIndex); e.preventDefault(); } // ← 修正済み
   }else if(e.key==='Escape'){
     hideChoices(); e.preventDefault();
   }
 });
-
 function updateActive(items){
   items.forEach(x=>x.classList.remove('active'));
   if(activeIndex>=0){
@@ -204,13 +193,11 @@ function updateActive(items){
     items[activeIndex].scrollIntoView({block:'nearest'});
   }
 }
-
-// 入力でフィルタ（任意。不要ならこのブロックは削除OK）
+// 入力でフィルタ（任意）
 answerElRef.addEventListener('input', ()=>{
   const q = answerElRef.value.trim();
   renderChoices(q ? baseChoices.filter(x=>x.includes(q)) : baseChoices);
 });
-
 answerElRef.addEventListener('focus', placePopup);
 answerElRef.addEventListener('blur', () => setTimeout(hideChoices, 120));
 window.addEventListener('resize', placePopup);
@@ -219,10 +206,9 @@ window.addEventListener('scroll', placePopup, true);
 function escapeHTML(s){
   return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
-// ===== 自前ドロップダウン：ここまで追記 =====
+/* ===== 自前ドロップダウン ここまで ===== */
 
-
-// 【追加】正解カウンター（1正解=1円）——————
+/* 正解カウンター（1正解=1円） */
 const ALLOWANCE_PER_OK = 1; // 1円
 let okTotal = Number(localStorage.getItem('okTotal') || 0);
 const okCountEl = document.getElementById('okCount');
@@ -239,7 +225,6 @@ document.getElementById('resetCounterBtn').onclick = ()=>{
     updateCounterUI();
   }
 };
-// ————————————————————————————————
 
 /* 初期登録：problems -> log */
 document.getElementById('initBtn').onclick = async ()=>{
@@ -280,6 +265,16 @@ document.getElementById('loadAll').onclick=()=>loadFromLog('all');
 function render(){
   if(!deck.length){ document.getElementById('flashcard').style.display='none'; return; }
   const c=deck[idx];
+
+  // ★デモ用 choices（GASがまだchoicesを返していない場合の表示確認用。実装後は削除OK）
+  if(!Array.isArray(c.choices)){
+    c.choices = [
+      "忙しくなくなったら応えんに行くよ",
+      "ヒマつぶしに応えんをやめるよ",
+      "手があかないうちに応えんに行くよ"
+    ];
+  }
+
   document.getElementById('frontText').textContent = c.front || '';
   const ans=c.back||'';
   const backEl=document.getElementById('backText');
@@ -291,13 +286,9 @@ function render(){
 
   judged = false;
   document.getElementById('answerInput').focus();
-    judged = false;
-  document.getElementById('answerInput').focus();
 
-  // ▼ この1行を追加：この問題の三択を表示（c.choices が無ければ空配列）
+  // この問題の三択を表示（c.choices が無ければ空配列）
   showChoices(Array.isArray(c.choices) ? c.choices : []);
-}
-
 }
 
 function next(){ if(deck.length){ idx=(idx+1)%deck.length; render(); } }
@@ -321,13 +312,13 @@ async function checkAnswer(){
   judged = true;
   document.getElementById('answerInput').blur();
 
-  // 【追加】正解カウンターを増やす
+  // 正解カウンター
   if(ok){
     okTotal += 1;
     updateCounterUI();
   }
 
-  // GAS送信は裏で
+  // GASへ記録（裏で）
   try{
     fetch(GAS_URL, {
       method: 'POST',
@@ -344,15 +335,9 @@ async function checkAnswer(){
   }
 }
 
-/* イベント登録 */
-document.getElementById('submitBtn').onclick = checkAnswer;
-document.getElementById('revealBtn').onclick = reveal;
-document.getElementById('nextBtn').onclick = next;
-document.getElementById('prevBtn').onclick = prev;
-
 /* ショートカット */
 window.addEventListener('keydown',(e)=>{
-  if (e.isComposing) return; // IME変換中は無視（任意）
+  if (e.isComposing) return; // IME変換中は無視
 
   const tag = (document.activeElement?.tagName || '').toLowerCase();
   const isTyping = tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable;
