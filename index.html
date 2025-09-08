@@ -291,6 +291,13 @@ function render(){
 
   judged = false;
   document.getElementById('answerInput').focus();
+    judged = false;
+  document.getElementById('answerInput').focus();
+
+  // ▼ この1行を追加：この問題の三択を表示（c.choices が無ければ空配列）
+  showChoices(Array.isArray(c.choices) ? c.choices : []);
+}
+
 }
 
 function next(){ if(deck.length){ idx=(idx+1)%deck.length; render(); } }
