@@ -311,7 +311,7 @@ function render(){
   document.getElementById('answerInput').focus();
 
   // この問題の三択を表示（c.choices が無ければ空配列）
-  showChoices(Array.isArray(c.choices) ? c.choices : []);
+
 }
 
 function next(){ if(deck.length){ idx = (idx + 1) % deck.length; render(); } }
