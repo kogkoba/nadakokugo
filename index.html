@@ -4,87 +4,58 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>灘選抜【国語】簡易勉強システム</title>
-<style>
-  body{font-family:sans-serif;background:#0b1020;color:#fff;margin:0}
-  .wrap{max-width:900px;margin:auto;padding:20px}
-  button{margin:4px;padding:8px 12px;font-weight:bold;border:none;border-radius:6px;cursor:pointer}
-  button.primary{background:#4fc3f7;color:#000}
-  button.ghost{background:transparent;border:1px solid #999;color:#fff}
-  .flash{background:#121a33;padding:20px;border-radius:12px;margin-top:16px}
-/* ★ タイトル・説明・ボタン・カウンターをコンパクトにする */
-.wrap h1{
-  font-size:1.1rem;   /* タイトルも小さめに */
-  margin-bottom:4px;
+<style>/* === 基本UI === */
+body{font-family:sans-serif;background:#0b1020;color:#fff;margin:0}
+.wrap{max-width:900px;margin:auto;padding:20px}
+button{margin:4px;font-weight:bold;border:none;border-radius:6px;cursor:pointer}
+button.primary{background:#4fc3f7;color:#000}
+button.ghost{background:transparent;border:1px solid #999;color:#fff}
+.flash{background:#121a33;padding:20px;border-radius:12px;margin-top:16px}
+
+/* === コンパクト版（タイトル・説明・ボタン・カウンターを小さく） === */
+.wrap h1{ font-size:1.1rem; margin-bottom:4px; }
+.wrap p{  font-size:0.75rem; line-height:1.3; margin:4px 0 8px; }
+button{   font-size:0.8rem;  padding:4px 8px; }
+.counter{  font-size:0.8rem; padding:4px 6px; 
+  margin:12px 0 8px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+  border:1px solid rgba(255,255,255,.2); border-radius:10px; background:rgba(255,255,255,.06);
 }
-.wrap p{
-  font-size:0.75rem;  /* 説明文さらに小さく */
-  line-height:1.3;
-  margin:4px 0 8px;
-}
-button{
-  font-size:0.8rem;   /* ボタン文字縮小 */
-  padding:4px 8px;    /* ボタンの高さも圧縮 */
-}
-.counter{
-  font-size:0.8rem;   /* カウンター全体を小さく */
-  padding:4px 6px;
-}
-.counter .pill{ 
-  font-size:0.8rem; 
-  padding:2px 6px; 
+.counter .pill{ font-size:0.8rem; padding:2px 6px;
+  display:inline-block; border-radius:999px; background:#0c1328; border:1px solid rgba(255,255,255,.2); font-weight:700;
 }
 
-/* ★ 問題表示エリアをより広く */
-:root{ --card-height: 70vh; }  /* ← 56vh → 70vh に拡大 */
+/* === 問題テキストを少し小さめ === */
+.q{ white-space:pre-line; font-size:0.95rem; line-height:1.35; }
+.a{ margin-top:8px; color:#ccc; display:none; font-size:0.9rem; line-height:1.35; }
+.msg{ font-size:0.9rem; line-height:1.3; }
+.msg.ok{color:#3ddc97} .msg.ng{color:#ff6b6b}
 
+/* === IME/キーボード対策 === */
+:root{ --kb-safe: max(env(safe-area-inset-bottom, 0px), 0px); }
+body.kb-open { padding-bottom: calc( var(--kb-space, 240px) + var(--kb-safe) ); }
+.ime-spacer{ display:none; height:var(--kb-space, 240px); }
+body.kb-open .ime-spacer{ display:block; }
 
+/* === カードの見た目高さを統一 → 問題エリアを広く（70vh） === */
+:root{ --card-height: 70vh; }        /* ← ここを1か所に統一！ */
+#flashcard{ position:relative; min-height: var(--card-height); }
 
+/* 上側は内部スクロール（高さはJSで算出） */
+.qa-scroll{ overflow:auto; padding-bottom:8px; }
 
+/* 下側の入力ドックを固定（sticky） */
+.answer-dock{
+  position: sticky; bottom: calc(16px + var(--kb-safe)); z-index: 2;
+  margin: 10px -20px -20px; padding: 12px 20px 16px;
+  background: rgba(11,16,32,.85); backdrop-filter: blur(6px);
+  border-top: 1px solid rgba(255,255,255,.12);
+  border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;
+}
+.answer-dock input{
+  width:100%; padding:8px; border-radius:6px; border:1px solid #999;
+  background:#0c1328; color:#fff;
+}
 
-  
-  /* 問題や答えを少し小さく表示 */
-  .q{ white-space:pre-line; font-size:0.95rem; line-height:1.35; }
-  .a{ margin-top:8px; color:#ccc; display:none; font-size:0.9rem; line-height:1.35; }
-  .msg{ font-size:0.9rem; line-height:1.3; }
-  .msg.ok{color:#3ddc97}
-  .msg.ng{color:#ff6b6b}
-
-  /* カウンター枠 */
-  .counter{
-    margin:12px 0 8px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
-    border:1px solid rgba(255,255,255,.2); border-radius:10px; padding:10px 12px;
-    background:rgba(255,255,255,.06);
-  }
-  .counter .pill{
-    display:inline-block; padding:4px 10px; border-radius:999px;
-    background:#0c1328; border:1px solid rgba(255,255,255,.2); font-weight:700;
-  }
-
-  /* 【見えなくなる問題】IME/KB対策 */
-  :root{ --kb-safe: max(env(safe-area-inset-bottom, 0px), 0px); }
-  body.kb-open { padding-bottom: calc( var(--kb-space, 240px) + var(--kb-safe) ); }
-  .ime-spacer{ display:none; height:var(--kb-space, 240px); }
-  body.kb-open .ime-spacer{ display:block; }
-
-  /* ★ 固定高さロジック：カードの見た目高さをCSS変数で統一 */
-  :root{ --card-height: 56vh; } /* 好みで 52〜64vh 程度に */
-  #flashcard{ position:relative; min-height: var(--card-height); }
-
-  /* 上側は内部スクロールだけにする（max-heightは使わない） */
-  .qa-scroll{ overflow:auto; padding-bottom:8px; }
-
-  /* 入力欄をカード下部に固定（sticky） */
-  .answer-dock{
-    position: sticky; bottom: calc(16px + var(--kb-safe)); z-index: 2;
-    margin: 10px -20px -20px; padding: 12px 20px 16px;
-    background: rgba(11,16,32,.85); backdrop-filter: blur(6px);
-    border-top: 1px solid rgba(255,255,255,.12);
-    border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;
-  }
-  .answer-dock input{
-    width:100%; padding:8px; border-radius:6px; border:1px solid #999;
-    background:#0c1328; color:#fff;
-  }
 </style>
 </head>
 <body>
