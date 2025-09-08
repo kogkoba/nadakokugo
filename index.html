@@ -16,7 +16,7 @@
   .msg.ok{color:#3ddc97}
   .msg.ng{color:#ff6b6b}
 
-  /* カウンター枠のスタイル */
+  /* カウンター枠 */
   .counter{
     margin:12px 0 8px;
     display:flex; gap:10px; align-items:center; flex-wrap:wrap;
@@ -31,7 +31,6 @@
 
   /* ===== 自前ドロップダウン ===== */
   .answer-wrap { position: relative; }
-
   .choice-pop{
     position:absolute; left:0; right:0; top:100%;
     margin-top:8px;
@@ -43,18 +42,17 @@
     max-height:240px;
     overflow:auto;
   }
-  .choice-pop.open-up{
+  .choice-pop.open-up{ /* 今回は使わない（常に下に開く） */
     top:auto; bottom:100%;
     margin-top:0; margin-bottom:8px;
   }
   .choice-pop.hidden{ display:none; }
-
   .choice-item{
     padding:10px 12px; cursor:pointer; line-height:1.3; user-select:none;
   }
   .choice-item:hover, .choice-item.active{ background:#1e293b; }
 
-  /* 親でクリップされないように */
+  /* クリップ回避 */
   .wrap, .flash { overflow:visible; position:relative; z-index:1; }
   .answer-input{ position:relative; z-index:10; }
 </style>
@@ -88,7 +86,7 @@
     <div id="backText" class="a"></div>
 
     <div style="margin-top:10px">
-      <!-- 自前ドロップダウン対応の入力ブロック -->
+      <!-- 入力欄＋候補ポップアップ -->
       <div class="answer-wrap">
         <input id="answerInput" class="answer-input" type="text"
                placeholder="答えを入力" autocomplete="off" spellcheck="false"
@@ -96,7 +94,6 @@
         <div id="choice-pop" class="choice-pop hidden" role="listbox" aria-label="候補一覧"></div>
       </div>
       <button id="toggleChoicesBtn" class="ghost" type="button" style="margin:6px 0">候補を表示／隠す（Alt+↓）</button>
-
 
       <div id="message" class="msg"></div>
       <div style="margin-top:8px">
@@ -118,7 +115,6 @@ function toHiragana(str){
   return str.replace(/[ァ-ン]/g, s => String.fromCharCode(s.charCodeAt(0) - 0x60));
 }
 function normalize(s){
-  // 全角・半角統一 → 空白除去 → 主要な記号除去（[]や()はエスケープ）
   return toHiragana((s || '')
     .toLowerCase()
     .normalize('NFKC')
@@ -137,103 +133,89 @@ const answerElRef = document.getElementById('answerInput');
 let baseChoices = [];     // 問題ごとの元データ
 let activeIndex = -1;     // キーボード選択位置
 
-function showChoices(options){
-  baseChoices = Array.isArray(options) ? options.slice() : [];
-  renderChoices(baseChoices);
-}
-function hideChoices(){
-  popEl.classList.add('hidden');
-  popEl.innerHTML = '';
-  activeIndex = -1;
-}
+function showChoices(options){ baseChoices = Array.isArray(options) ? options.slice() : []; }
+function hideChoices(){ popEl.classList.add('hidden'); popEl.innerHTML = ''; activeIndex = -1; }
 function renderChoices(options){
-  if(!options || options.length === 0){
-    hideChoices();
-    return;
-  }
-  popEl.innerHTML = options
-    .map((t, i) => `<div class="choice-item" role="option" data-i="${i}">${escapeHTML(t)}</div>`)
-    .join('');
+  if(!options || options.length === 0){ hideChoices(); return; }
+  popEl.innerHTML = options.map((t,i)=>`<div class="choice-item" role="option" data-i="${i}">${escapeHTML(t)}</div>`).join('');
   popEl.classList.remove('hidden');
   placePopup();
   activeIndex = -1;
 }
+function placePopup(){ /* 常に input 直下。上開きは使わない */ }
 
 // クリック確定
 popEl.addEventListener('click', (e)=>{
-  const item = e.target.closest('.choice-item');
-  if(!item) return;
-  selectChoice(Number(item.dataset.i));
-});
-function selectChoice(i){
-  const el = popEl.querySelector(`.choice-item[data-i="${i}"]`);
-  if(!el) return;
-  answerElRef.value = el.textContent.trim();
+  const item = e.target.closest('.choice-item'); if(!item) return;
+  answerElRef.value = item.textContent.trim();
   hideChoices();
-  // 必要なら自動判定：
-  // checkAnswer();
-}
-// キーボード操作（↑↓Enter / Esc）
+});
+
+answerElRef.addEventListener('input', ()=>{
+  if (popEl.classList.contains('hidden')) return; // 非表示なら何もしない
+  const q = answerElRef.value.trim();
+  renderChoices(q ? baseChoices.filter(x => x.includes(q)) : baseChoices);
+});
+
+// Alt+↓で開閉／開いている時だけ↑↓Enter/Escを処理
 answerElRef.addEventListener('keydown', (e)=>{
+  if (e.altKey && e.key === 'ArrowDown'){ e.preventDefault(); toggleChoices(); return; }
   if (popEl.classList.contains('hidden')) return;
+
   const items = [...popEl.querySelectorAll('.choice-item')];
-  if (items.length === 0) return;
+  if(!items.length) return;
 
   if (e.key === 'ArrowDown'){
-    activeIndex = (activeIndex + 1) % items.length;
-    updateActive(items);
-    e.preventDefault();
-  } else if (e.key === 'ArrowUp'){
-    activeIndex = (activeIndex - 1 + items.length) % items.length;
-    updateActive(items);
-    e.preventDefault();
-  } else if (e.key === 'Enter'){
+    activeIndex = (activeIndex + 1) % items.length; updateActive(items); e.preventDefault();
+  }else if (e.key === 'ArrowUp'){
+    activeIndex = (activeIndex - 1 + items.length) % items.length; updateActive(items); e.preventDefault();
+  }else if (e.key === 'Enter'){
     if (activeIndex >= 0){
-      selectChoice(activeIndex);
-      e.preventDefault();        // ← 修正済み
+      answerElRef.value = items[activeIndex].textContent.trim();
+      hideChoices(); e.preventDefault();
     }
-  } else if (e.key === 'Escape'){
-    hideChoices();
-    e.preventDefault();
+  }else if (e.key === 'Escape'){
+    hideChoices(); e.preventDefault();
   }
 });
+
 function updateActive(items){
-  items.forEach(x => x.classList.remove('active'));
+  items.forEach(x=>x.classList.remove('active'));
   if (activeIndex >= 0){
     items[activeIndex].classList.add('active');
     items[activeIndex].scrollIntoView({block:'nearest'});
   }
 }
-// 入力でフィルタ（任意）
-answerElRef.addEventListener('input', ()=>{
-  const q = answerElRef.value.trim();
-  renderChoices(q ? baseChoices.filter(x => x.includes(q)) : baseChoices);
-});
-answerElRef.addEventListener('focus', placePopup);
-answerElRef.addEventListener('blur', () => setTimeout(hideChoices, 120));
-window.addEventListener('resize', placePopup);
-window.addEventListener('scroll', placePopup, true);
+function toggleChoices(){
+  if (popEl.classList.contains('hidden')){
+    renderChoices(baseChoices && baseChoices.length ? baseChoices : []);
+    placePopup();
+  }else{
+    hideChoices();
+  }
+}
+const toggleBtn = document.getElementById('toggleChoicesBtn');
+if (toggleBtn){ toggleBtn.addEventListener('click', toggleChoices); }
 
 function escapeHTML(s){
-  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;'}[m]));
+  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
-/* ===== 自前ドロップダウン ここまで ===== */
+/* ===== 自前ドロップダウンここまで ===== */
 
 /* 正解カウンター（1正解=1円） */
-const ALLOWANCE_PER_OK = 1; // 1円
+const ALLOWANCE_PER_OK = 1;
 let okTotal = Number(localStorage.getItem('okTotal') || 0);
 const okCountEl = document.getElementById('okCount');
 const allowanceEl = document.getElementById('allowance');
 function updateCounterUI(){
   okCountEl.textContent = okTotal;
   allowanceEl.textContent = okTotal * ALLOWANCE_PER_OK;
-  localStorage.setItem('okTotal', String(okTotal)); // 永続化
+  localStorage.setItem('okTotal', String(okTotal));
 }
 updateCounterUI();
 document.getElementById('resetCounterBtn').onclick = ()=>{
   if(confirm('正解カウンターを0にリセットしますか？')){
-    okTotal = 0;
-    updateCounterUI();
+    okTotal = 0; updateCounterUI();
   }
 };
 
@@ -245,14 +227,11 @@ document.getElementById('initBtn').onclick = async ()=>{
     const list = await res.json();
     if(!Array.isArray(list) || !list.length) throw new Error('problems が空です（front/back を確認）');
 
-    // preflight回避
     const post = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action: 'init', list })
     });
-    if(!post.ok) throw new Error('log初期登録に失敗: ' + res.status);
-
+    if(!post.ok) throw new Error('log初期登録に失敗: ' + post.status);
     alert(`logに登録しました（${list.length}件、重複はスキップ）`);
   }catch(err){ console.error(err); alert(err.message||'初期登録でエラー'); }
 };
@@ -263,26 +242,17 @@ async function loadFromLog(mode){
     const res = await fetch(GAS_URL + '?mode=' + encodeURIComponent(mode));
     if(!res.ok) throw new Error('log取得に失敗: ' + res.status);
     const arr = await res.json();
-    if(!Array.isArray(arr) || !arr.length){
-      alert('出題できる問題が見つかりません'); return;
-    }
-    // シャッフル
-    for (let i = arr.length - 1; i > 0; i--){
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
+    if(!Array.isArray(arr) || !arr.length){ alert('出題できる問題が見つかりません'); return; }
+    for (let i = arr.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [arr[i],arr[j]] = [arr[j],arr[i]]; }
     deck = arr; idx = 0; render();
   }catch(err){ console.error(err); alert(err.message||'読み込みでエラー'); }
 }
-document.getElementById('loadUnanswered').onclick = () => loadFromLog('unanswered');
-document.getElementById('loadAll').onclick = () => loadFromLog('all');
+document.getElementById('loadUnanswered').onclick = ()=>loadFromLog('unanswered');
+document.getElementById('loadAll').onclick = ()=>loadFromLog('all');
 
 /* 表示 */
 function render(){
-  if(!deck.length){
-    document.getElementById('flashcard').style.display = 'none';
-    return;
-  }
+  if(!deck.length){ document.getElementById('flashcard').style.display='none'; return; }
   const c = deck[idx];
 
   // ★デモ用 choices（GASがまだ返さない場合の確認用。実装後は削除OK）
@@ -298,21 +268,22 @@ function render(){
   const ans = c.back || '';
   const backEl = document.getElementById('backText');
   if (/<\w+/.test(ans)) backEl.innerHTML = ans; else backEl.textContent = ans;
-  backEl.style.display = 'none';
-  document.getElementById('answerInput').value = '';
-  const msg = document.getElementById('message'); msg.textContent = ''; msg.className = 'msg';
-  document.getElementById('flashcard').style.display = 'block';
+  backEl.style.display='none';
+  document.getElementById('answerInput').value='';
+  const msg = document.getElementById('message'); msg.textContent=''; msg.className='msg';
+  document.getElementById('flashcard').style.display='block';
 
   judged = false;
   document.getElementById('answerInput').focus();
 
-  // この問題の三択を表示（c.choices が無ければ空配列）
-
+  // ▼ 候補データだけ更新（自動では開かない）
+  baseChoices = Array.isArray(c.choices) ? c.choices.slice() : [];
+  hideChoices(); // 問題切替時は閉じる
 }
 
-function next(){ if(deck.length){ idx = (idx + 1) % deck.length; render(); } }
-function prev(){ if(deck.length){ idx = (idx - 1 + deck.length) % deck.length; render(); } }
-function reveal(){ const b = document.getElementById('backText'); b.style.display = b.style.display === 'none' ? 'block' : 'none'; }
+function next(){ if(deck.length){ idx=(idx+1)%deck.length; render(); } }
+function prev(){ if(deck.length){ idx=(idx-1+deck.length)%deck.length; render(); } }
+function reveal(){ const b=document.getElementById('backText'); b.style.display = b.style.display==='none' ? 'block' : 'none'; }
 
 /* 判定 → log更新 → カウンター加算 */
 async function checkAnswer(){
@@ -320,65 +291,49 @@ async function checkAnswer(){
   const c = deck[idx];
   const userRaw = document.getElementById('answerInput').value;
   const user = normalize(userRaw);
-  const answers = String(c.back || '').split('|').map(s => normalize(s));
+  const answers = String(c.back||'').split('|').map(s=>normalize(s));
   const ok = answers.includes(user);
 
-  const msg = document.getElementById('message');
-  msg.textContent = ok ? '正解！' : ('不正解。正解は: ' + String(c.back || '').split('|')[0]);
+  const msg=document.getElementById('message');
+  msg.textContent = ok ? '正解！' : ('不正解。正解は: ' + String(c.back||'').split('|')[0]);
   msg.className = ok ? 'msg ok' : 'msg ng';
 
-  // 入力体験を優先：即座に次へ行ける状態にする
   judged = true;
   document.getElementById('answerInput').blur();
 
-  // 正解カウンター
-  if (ok){
-    okTotal += 1;
-    updateCounterUI();
-  }
+  if(ok){ okTotal += 1; updateCounterUI(); }
 
-  // GASへ記録（裏で）
   try{
     fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify({
-        action: 'update',
-        question: String(c.front || ''),
-        correctAnswer: String(c.back || '').split('|')[0],
-        isCorrect: ok
+        action:'update',
+        question:String(c.front||''),
+        correctAnswer:String(c.back||'').split('|')[0],
+        isCorrect:ok
       })
-    }).catch(err => console.error(err));
-  }catch(err){
-    console.error(err);
-  }
+    }).catch(err=>console.error(err));
+  }catch(err){ console.error(err); }
 }
 
 /* ショートカット */
-window.addEventListener('keydown', (e)=>{
-  if (e.isComposing) return; // IME変換中は無視
+window.addEventListener('keydown',(e)=>{
+  if (e.isComposing) return;
+  const tag=(document.activeElement?.tagName||'').toLowerCase();
+  const isTyping = tag==='input' || tag==='textarea' || document.activeElement?.isContentEditable;
 
-  const tag = (document.activeElement?.tagName || '').toLowerCase();
-  const isTyping = tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable;
+  if(e.key==='/'){ e.preventDefault(); reveal(); }
+  if(e.key.toLowerCase()==='n'){ e.preventDefault(); if(judged) next(); else checkAnswer(); }
+  if(e.key.toLowerCase()==='p'){ e.preventDefault(); prev(); }
 
-  if (e.key === '/'){ e.preventDefault(); reveal(); }
-  if (e.key.toLowerCase() === 'n'){
+  if(e.key==='Enter' && isTyping){
     e.preventDefault();
-    if (judged) next(); else checkAnswer();
+    if(e.shiftKey || e.ctrlKey){ checkAnswer(); next(); }
+    else{ checkAnswer(); }
   }
-  if (e.key.toLowerCase() === 'p'){ e.preventDefault(); prev(); }
-
-  if (e.key === 'Enter' && isTyping){
+  if(e.key==='Enter' && !isTyping){
     e.preventDefault();
-    if (e.shiftKey || e.ctrlKey){
-      checkAnswer(); next();  // Shift/Ctrl+Enter = 判定して次へ
-    } else {
-      checkAnswer();          // Enter = 判定のみ
-    }
-  }
-  if (e.key === 'Enter' && !isTyping){
-    e.preventDefault();
-    if (judged) next(); else checkAnswer();
+    if(judged) next(); else checkAnswer();
   }
 });
 </script>
