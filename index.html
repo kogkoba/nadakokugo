@@ -126,6 +126,102 @@ function normalize(s){
 let deck=[], idx=0;
 let judged = false; // 直近の問題が判定済みか
 
+  // ===== 自前ドロップダウン：ここから追記 =====
+const popEl = document.getElementById('choice-pop');
+const answerElRef = document.getElementById('answerInput');
+
+let baseChoices = [];     // 問題ごとの元データ
+let activeIndex = -1;     // キーボード選択位置
+
+function showChoices(options){
+  baseChoices = Array.isArray(options) ? options.slice() : [];
+  renderChoices(baseChoices);
+}
+
+function hideChoices(){
+  popEl.classList.add('hidden');
+  popEl.innerHTML = '';
+  activeIndex = -1;
+}
+
+function renderChoices(options){
+  if(!options || options.length===0){ hideChoices(); return; }
+  popEl.innerHTML = options
+    .map((t,i)=>`<div class="choice-item" role="option" data-i="${i}">${escapeHTML(t)}</div>`)
+    .join('');
+  popEl.classList.remove('hidden');
+  placePopup();
+  activeIndex = -1;
+}
+
+function placePopup(){
+  const r = answerElRef.getBoundingClientRect();
+  const popH = Math.min(popEl.scrollHeight, 240); // CSSのmax-heightと合わせる
+  const spaceBelow = window.innerHeight - r.bottom - 16;
+  if(spaceBelow < popH){ popEl.classList.add('open-up'); }
+  else{ popEl.classList.remove('open-up'); }
+}
+
+// クリック確定
+popEl.addEventListener('click', (e)=>{
+  const item = e.target.closest('.choice-item');
+  if(!item) return;
+  selectChoice(Number(item.dataset.i));
+});
+
+function selectChoice(i){
+  const el = popEl.querySelector(`.choice-item[data-i="${i}"]`);
+  if(!el) return;
+  answerElRef.value = el.textContent.trim();
+  hideChoices();
+  // 自動判定したい場合は↓を有効化
+  // checkAnswer();
+}
+
+// キーボード操作（↑↓Enter / Esc）
+answerElRef.addEventListener('keydown', (e)=>{
+  if(popEl.classList.contains('hidden')) return;
+  const items = [...popEl.querySelectorAll('.choice-item')];
+  if(items.length===0) return;
+
+  if(e.key==='ArrowDown'){
+    activeIndex = (activeIndex + 1) % items.length;
+    updateActive(items); e.preventDefault();
+  }else if(e.key==='ArrowUp'){
+    activeIndex = (activeIndex - 1 + items.length) % items.length;
+    updateActive(items); e.preventDefault();
+  }else if(e.key==='Enter'){
+    if(activeIndex>=0){ selectChoice(activeIndex); e.prevent止; }
+  }else if(e.key==='Escape'){
+    hideChoices(); e.preventDefault();
+  }
+});
+
+function updateActive(items){
+  items.forEach(x=>x.classList.remove('active'));
+  if(activeIndex>=0){
+    items[activeIndex].classList.add('active');
+    items[activeIndex].scrollIntoView({block:'nearest'});
+  }
+}
+
+// 入力でフィルタ（任意。不要ならこのブロックは削除OK）
+answerElRef.addEventListener('input', ()=>{
+  const q = answerElRef.value.trim();
+  renderChoices(q ? baseChoices.filter(x=>x.includes(q)) : baseChoices);
+});
+
+answerElRef.addEventListener('focus', placePopup);
+answerElRef.addEventListener('blur', () => setTimeout(hideChoices, 120));
+window.addEventListener('resize', placePopup);
+window.addEventListener('scroll', placePopup, true);
+
+function escapeHTML(s){
+  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+// ===== 自前ドロップダウン：ここまで追記 =====
+
+
 // 【追加】正解カウンター（1正解=1円）——————
 const ALLOWANCE_PER_OK = 1; // 1円
 let okTotal = Number(localStorage.getItem('okTotal') || 0);
