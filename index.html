@@ -158,13 +158,7 @@ function renderChoices(options){
   placePopup();
   activeIndex = -1;
 }
-function placePopup(){
-  const r = answerElRef.getBoundingClientRect();
-  const popH = Math.min(popEl.scrollHeight, 240); // CSSのmax-heightと合わせる
-  const spaceBelow = window.innerHeight - r.bottom - 16;
-  if (spaceBelow < popH) popEl.classList.add('open-up');
-  else popEl.classList.remove('open-up');
-}
+
 // クリック確定
 popEl.addEventListener('click', (e)=>{
   const item = e.target.closest('.choice-item');
