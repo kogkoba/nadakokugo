@@ -28,6 +28,37 @@
     background:#0c1328; border:1px solid rgba(255,255,255,.2);
     font-weight:700;
   }
+/* ===== 自前ドロップダウン：ここから追記 ===== */
+.answer-wrap { position: relative; }
+
+.choice-pop{
+  position:absolute; left:0; right:0; top:100%;
+  margin-top:8px;
+  background:#0f172a;
+  border:1px solid #334155;
+  border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.35);
+  z-index:9999;
+  max-height:240px;
+  overflow:auto;
+}
+.choice-pop.open-up{
+  top:auto; bottom:100%;
+  margin-top:0; margin-bottom:8px;
+}
+.choice-pop.hidden{ display:none; }
+
+.choice-item{
+  padding:10px 12px; cursor:pointer; line-height:1.3; user-select:none;
+}
+.choice-item:hover, .choice-item.active{ background:#1e293b; }
+
+/* 念のため：親でクリップされないように */
+.wrap, .flash { overflow:visible; position:relative; z-index:1; }
+.answer-input{ position:relative; z-index:10; }
+/* ===== 自前ドロップダウン：ここまで追記 ===== */
+
+  
 </style>
 </head>
 <body>
