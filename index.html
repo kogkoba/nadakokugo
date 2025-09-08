@@ -56,7 +56,17 @@
   #flashcard{ position:relative; }
   .qa-scroll{
     /* 入力欄の上下動を防ぐため、質問/選択肢はここをスクロール */
-    max-height: min(48vh, 520px);
+    /* カード見た目の基準高さ（端末で共通） */
+:root{ --card-height: 56vh; }  /* 好みで 52〜64vh あたりに */
+
+#flashcard{ position:relative; min-height: var(--card-height); }
+
+/* qa-scroll は高さをJSで指定（resize/レンダー時に更新） */
+.qa-scroll{
+  overflow:auto;
+  padding-bottom:8px;
+}
+
     overflow:auto;
     padding-bottom:8px;
   }
