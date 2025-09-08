@@ -12,83 +12,48 @@
   button.ghost{background:transparent;border:1px solid #999;color:#fff}
   .flash{background:#121a33;padding:20px;border-radius:12px;margin-top:16px}
 
-   /* 問題や答えを少し小さく表示 */
-  .q{
-    white-space:pre-line;
-    font-size:0.95rem;   /* ← 1.2rem → 0.95rem に変更 */
-    line-height:1.35;    /* 行間を少し詰める */
-  }
-  .a{
-    margin-top:8px;
-    color:#ccc;
-    display:none;
-    font-size:0.9rem;    /* 答え表示も小さめに */
-    line-height:1.35;
-  }
-  .msg{
-    font-size:0.9rem;    /* 判定メッセージも小さく統一 */
-    line-height:1.3;
-  }
+  /* 問題や答えを少し小さく表示 */
+  .q{ white-space:pre-line; font-size:0.95rem; line-height:1.35; }
+  .a{ margin-top:8px; color:#ccc; display:none; font-size:0.9rem; line-height:1.35; }
+  .msg{ font-size:0.9rem; line-height:1.3; }
   .msg.ok{color:#3ddc97}
   .msg.ng{color:#ff6b6b}
 
-
-  /* 【追加】カウンター枠のスタイル */
+  /* カウンター枠 */
   .counter{
-    margin:12px 0 8px;
-    display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    margin:12px 0 8px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
     border:1px solid rgba(255,255,255,.2); border-radius:10px; padding:10px 12px;
     background:rgba(255,255,255,.06);
   }
   .counter .pill{
     display:inline-block; padding:4px 10px; border-radius:999px;
-    background:#0c1328; border:1px solid rgba(255,255,255,.2);
-    font-weight:700;
+    background:#0c1328; border:1px solid rgba(255,255,255,.2); font-weight:700;
   }
 
-  /* 【見えなくなる問題】IME変換候補やモバイルKBが被らないための余白仕組み */
+  /* 【見えなくなる問題】IME/KB対策 */
   :root{ --kb-safe: max(env(safe-area-inset-bottom, 0px), 0px); }
   body.kb-open { padding-bottom: calc( var(--kb-space, 240px) + var(--kb-safe) ); }
   .ime-spacer{ display:none; height:var(--kb-space, 240px); }
   body.kb-open .ime-spacer{ display:block; }
 
-  /* 【固定入力欄】カード下部に入力エリアを固定する */
-  #flashcard{ position:relative; }
-  .qa-scroll{
-    /* 入力欄の上下動を防ぐため、質問/選択肢はここをスクロール */
-    /* カード見た目の基準高さ（端末で共通） */
-:root{ --card-height: 56vh; }  /* 好みで 52〜64vh あたりに */
+  /* ★ 固定高さロジック：カードの見た目高さをCSS変数で統一 */
+  :root{ --card-height: 56vh; } /* 好みで 52〜64vh 程度に */
+  #flashcard{ position:relative; min-height: var(--card-height); }
 
-#flashcard{ position:relative; min-height: var(--card-height); }
+  /* 上側は内部スクロールだけにする（max-heightは使わない） */
+  .qa-scroll{ overflow:auto; padding-bottom:8px; }
 
-/* qa-scroll は高さをJSで指定（resize/レンダー時に更新） */
-.qa-scroll{
-  overflow:auto;
-  padding-bottom:8px;
-}
-
-    overflow:auto;
-    padding-bottom:8px;
-  }
+  /* 入力欄をカード下部に固定（sticky） */
   .answer-dock{
-    position: sticky;
-    bottom: calc(16px + var(--kb-safe)); /* 画面下からの固定位置 */
-    z-index: 2;
-    margin: 10px -20px -20px;           /* カード端まで広げる */
-    padding: 12px 20px 16px;
-    background: rgba(11,16,32,.85);     /* 背景を半透明にして下の内容と分離 */
-    backdrop-filter: blur(6px);
+    position: sticky; bottom: calc(16px + var(--kb-safe)); z-index: 2;
+    margin: 10px -20px -20px; padding: 12px 20px 16px;
+    background: rgba(11,16,32,.85); backdrop-filter: blur(6px);
     border-top: 1px solid rgba(255,255,255,.12);
-    border-bottom-left-radius: 12px;
-    border-bottom-right-radius: 12px;
+    border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;
   }
   .answer-dock input{
-    width:100%;
-    padding:8px;
-    border-radius:6px;
-    border:1px solid #999;
-    background:#0c1328;
-    color:#fff;
+    width:100%; padding:8px; border-radius:6px; border:1px solid #999;
+    background:#0c1328; color:#fff;
   }
 </style>
 </head>
@@ -117,14 +82,14 @@
   </div>
 
   <div id="flashcard" class="flash" style="display:none">
-    <!-- 【固定入力欄】上側：スクロール領域（質問＆選択肢） -->
+    <!-- 上側：スクロール領域（問題＆選択肢） -->
     <div class="qa-scroll">
       <div id="frontText" class="q"></div>
       <div id="backText" class="a"></div>
       <div id="message" class="msg" style="margin-top:6px"></div>
     </div>
 
-    <!-- 【固定入力欄】下側：常にほぼ同じ位置にある入力ドック -->
+    <!-- 下側：固定入力ドック -->
     <div class="answer-dock">
       <input id="answerInput" type="text" placeholder="答えを入力">
       <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap">
@@ -136,7 +101,7 @@
     </div>
   </div>
 
-  <!-- 【見えなくなる問題】IME候補やKBで隠れないようにする余白ブロック -->
+  <!-- IME/KB対策の余白ブロック -->
   <div id="belowSpace" class="ime-spacer" aria-hidden="true"></div>
 </div>
 
@@ -149,7 +114,7 @@ function toHiragana(str){return str.replace(/[ァ-ン]/g,s=>String.fromCharCode(
 function normalize(s){
   return toHiragana((s||'').toLowerCase().normalize('NFKC')
     .replace(/[\s\u3000]/g,'')
-    .replace(/[、。・，．,.!?！？:：;；~〜ー―\-_/\\()\[\]【】<>＜＞]/g,''));
+    .replace(/[、。・，．,.!?！？:：;；~〜ー―\\-_/\\()\\[\\]【】<>＜＞]/g,''));
 }
 
 let deck=[], idx=0;
@@ -180,8 +145,7 @@ document.getElementById('initBtn').onclick = async ()=>{
     const list = await res.json();
     if(!Array.isArray(list) || !list.length) throw new Error('problems が空です（front/back を確認）');
     const post = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action: 'init', list })
     });
     if(!post.ok) throw new Error('log初期登録に失敗: ' + post.status);
@@ -201,28 +165,48 @@ async function loadFromLog(mode){
     deck = arr; idx = 0; render();
   }catch(err){ console.error(err); alert(err.message||'読み込みでエラー'); }
 }
-document.getElementById('loadUnanswered').onclick=()=>loadFromLog('unanswered');
-document.getElementById('loadAll').onclick=()=>loadFromLog('all');
+document.getElementById('loadUnanswered').onclick = ()=>loadFromLog('unanswered');
+document.getElementById('loadAll').onclick = ()=>loadFromLog('all');
+
+/* ★ 揺れ防止：カード高さを固定し、質問領域だけに高さを割り当て */
+function sizeQA(){
+  const card = document.getElementById('flashcard');
+  const qa   = document.querySelector('.qa-scroll');
+  const dock = document.querySelector('.answer-dock');
+  if(!card || !qa || !dock) return;
+
+  // CSS変数 --card-height を px に解決
+  const vh = Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
+  const cardHeightVh = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--card-height'));
+  const cardH = Math.round(vh * (cardHeightVh / 100));
+
+  const padding = 24; // 余白
+  const qaH = Math.max(180, cardH - dock.offsetHeight - padding);
+  qa.style.height = qaH + 'px';
+}
+window.addEventListener('resize', sizeQA);
 
 /* 表示 */
 function render(){
   if(!deck.length){ document.getElementById('flashcard').style.display='none'; return; }
-  const c=deck[idx];
+  const c = deck[idx];
 
-  // 表示領域更新（質問＆選択肢）
+  // 表示領域更新（問題/選択肢）
   document.getElementById('frontText').textContent = c.front || '';
-  const ans=c.back||'';
-  const backEl=document.getElementById('backText');
-  if(/<\w+/.test(ans)) backEl.innerHTML=ans; else backEl.textContent=ans;
-  backEl.style.display='none';
+  const ans = c.back || '';
+  const backEl = document.getElementById('backText');
+  if(/<\w+/.test(ans)) backEl.innerHTML = ans; else backEl.textContent = ans;
+  backEl.style.display = 'none';
 
-  // 入力欄リセット（位置は固定なので揺れない）
-  const msg=document.getElementById('message'); msg.textContent=''; msg.className='msg';
+  // 入力欄リセット
+  const msg = document.getElementById('message'); msg.textContent=''; msg.className='msg';
   const input = document.getElementById('answerInput');
   input.value='';
   document.getElementById('flashcard').style.display='block';
   judged = false;
   input.focus();
+
+  sizeQA(); // ★ 高さ再計算
 }
 
 function next(){ if(deck.length){ idx=(idx+1)%deck.length; render(); } }
@@ -248,8 +232,7 @@ async function checkAnswer(){
 
   try{
     fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
         action: 'update',
         question: String(c.front || ''),
@@ -260,40 +243,28 @@ async function checkAnswer(){
   }catch(err){ console.error(err); }
 }
 
-/* クリック設定 */
+/* ボタン */
 document.getElementById('submitBtn').onclick = checkAnswer;
 document.getElementById('revealBtn').onclick = reveal;
 document.getElementById('nextBtn').onclick = next;
 document.getElementById('prevBtn').onclick = prev;
 
-/* ショートカット */
-window.addEventListener('keydown',(e)=>{
-  if (e.isComposing) return;
-  const tag = (document.activeElement?.tagName || '').toLowerCase();
-  const isTyping = tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable;
+/* ★ Enter→Enterで次へ（入力欄にフォーカスのままOK） */
+window.addEventListener('keydown', (e)=>{
+  if (e.isComposing) return; // IME変換中は無視
+  if (e.key === '/'){ e.preventDefault(); reveal(); return; }
+  if (e.key.toLowerCase() === 'n'){ e.preventDefault(); if(judged) next(); else checkAnswer(); return; }
+  if (e.key.toLowerCase() === 'p'){ e.preventDefault(); prev(); return; }
 
-  if(e.key==='/' ){ e.preventDefault(); reveal(); }
-  if(e.key.toLowerCase()==='n'){
+  if (e.key === 'Enter'){
     e.preventDefault();
-    if(judged) next(); else checkAnswer();
-  }
-  if(e.key.toLowerCase()==='p'){ e.preventDefault(); prev(); }
-
-  if(e.key==='Enter' && isTyping){
-    e.preventDefault();
-    if(e.shiftKey || e.ctrlKey){ checkAnswer(); next(); }
-    else{ checkAnswer(); }
-  }
-  if(e.key==='Enter' && !isTyping){
-    e.preventDefault();
-    if(judged) next(); else checkAnswer();
+    if (judged) next();
+    else checkAnswer();
   }
 });
 
-/* 【見えなくなる問題】IME候補で隠れないようにする処理 */
+/* IME/KB対策 */
 const answerEl = document.getElementById('answerInput');
-const spacerEl = document.getElementById('belowSpace');
-
 function estimateKbSpace(){
   let h = 240;
   if (window.visualViewport){
@@ -305,12 +276,9 @@ function estimateKbSpace(){
 function openKbSpace(){
   estimateKbSpace();
   document.body.classList.add('kb-open');
-  // 入力欄を視界に保つ
   setTimeout(()=>{ document.querySelector('.answer-dock').scrollIntoView({block:'end',behavior:'smooth'}); }, 50);
 }
-function closeKbSpace(){
-  document.body.classList.remove('kb-open');
-}
+function closeKbSpace(){ document.body.classList.remove('kb-open'); }
 answerEl.addEventListener('focus', openKbSpace);
 answerEl.addEventListener('blur', closeKbSpace);
 if (window.visualViewport){
